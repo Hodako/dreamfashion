@@ -6,7 +6,7 @@ import { getExpenses, getSales, getWithdrawals } from "@/lib/queries";
 import { fmtMoney, fmtDateTime } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 
-export const Route = createFileRoute("/_authenticated/")({
+export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
 });
 
