@@ -83,11 +83,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Dream Fashion — Inventory & Sales" },
       { name: "description", content: "Inventory and sales management for Dream Fashion." },
       { name: "author", content: "Dream Fashion" },
-      { property: "og:title", content: "Dream Fashion" },
-      { property: "og:description", content: "Inventory and sales management." },
+      { property: "og:title", content: "Dream Fashion — Inventory & Sales" },
+      { property: "og:description", content: "Inventory and sales management for Dream Fashion." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Dream Fashion — Inventory & Sales" },
+      { name: "twitter:description", content: "Inventory and sales management for Dream Fashion." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ddb94e53-f613-402e-860b-d9df9008c645/id-preview-778cd12b--cf91a654-3413-4e57-8cec-7777179f68ae.lovable.app-1780833645296.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ddb94e53-f613-402e-860b-d9df9008c645/id-preview-778cd12b--cf91a654-3413-4e57-8cec-7777179f68ae.lovable.app-1780833645296.png" },
     ],
     links: [
       {
