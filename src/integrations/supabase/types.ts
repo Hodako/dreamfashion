@@ -14,7 +14,304 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      expenses: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          note: string | null
+          owner_id: string
+          title: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          owner_id: string
+          title: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          owner_id?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      owner_withdrawals: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          note: string | null
+          owner_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          owner_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          owner_id?: string
+        }
+        Relationships: []
+      }
+      parties: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          phone: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+          phone?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          phone?: string | null
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          note: string | null
+          owner_id: string
+          party_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          owner_id: string
+          party_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          owner_id?: string
+          party_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          buy_price: number
+          created_at: string
+          id: string
+          image_url: string | null
+          name: string
+          owner_id: string
+          sell_price: number
+          stock: number
+        }
+        Insert: {
+          buy_price?: number
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          name: string
+          owner_id: string
+          sell_price?: number
+          stock?: number
+        }
+        Update: {
+          buy_price?: number
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          name?: string
+          owner_id?: string
+          sell_price?: number
+          stock?: number
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          full_name: string | null
+          id: string
+          shop_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          full_name?: string | null
+          id: string
+          shop_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          shop_name?: string | null
+        }
+        Relationships: []
+      }
+      purchases: {
+        Row: {
+          created_at: string
+          id: string
+          note: string | null
+          owner_id: string
+          product_id: string | null
+          product_name: string
+          qty: number
+          total: number
+          unit_cost: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          owner_id: string
+          product_id?: string | null
+          product_name: string
+          qty?: number
+          total?: number
+          unit_cost?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          owner_id?: string
+          product_id?: string | null
+          product_name?: string
+          qty?: number
+          total?: number
+          unit_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchases_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales: {
+        Row: {
+          buy_price: number
+          created_at: string
+          due_amount: number
+          id: string
+          owner_id: string
+          paid_amount: number
+          party_id: string | null
+          product_id: string | null
+          product_name: string
+          profit: number
+          qty: number
+          sell_price: number
+          type: Database["public"]["Enums"]["sale_type"]
+        }
+        Insert: {
+          buy_price?: number
+          created_at?: string
+          due_amount?: number
+          id?: string
+          owner_id: string
+          paid_amount?: number
+          party_id?: string | null
+          product_id?: string | null
+          product_name: string
+          profit?: number
+          qty?: number
+          sell_price?: number
+          type: Database["public"]["Enums"]["sale_type"]
+        }
+        Update: {
+          buy_price?: number
+          created_at?: string
+          due_amount?: number
+          id?: string
+          owner_id?: string
+          paid_amount?: number
+          party_id?: string | null
+          product_id?: string | null
+          product_name?: string
+          profit?: number
+          qty?: number
+          sell_price?: number
+          type?: Database["public"]["Enums"]["sale_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      somiti_entries: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          kind: Database["public"]["Enums"]["somiti_kind"]
+          note: string | null
+          owner_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          kind: Database["public"]["Enums"]["somiti_kind"]
+          note?: string | null
+          owner_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["somiti_kind"]
+          note?: string | null
+          owner_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +320,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      sale_type: "cash" | "credit"
+      somiti_kind: "deposit" | "withdraw"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +448,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      sale_type: ["cash", "credit"],
+      somiti_kind: ["deposit", "withdraw"],
+    },
   },
 } as const
