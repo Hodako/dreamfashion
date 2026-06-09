@@ -1,4 +1,3 @@
-import bcrypt from "bcryptjs";
 
 // auth-helpers.ts — all crypto imports are dynamic to avoid client-bundle issues
 
@@ -32,11 +31,13 @@ export async function verifyToken(token: string) {
   }
 }
 
-export function hashPassword(password: string): string {
+export async function hashPassword(password: string): Promise<string> {
+  const bcrypt = await import("bcryptjs").then((m) => m.default ?? m);
   return bcrypt.hashSync(password, 10);
 }
 
-export function comparePassword(password: string, hashed: string): boolean {
+export async function comparePassword(password: string, hashed: string): Promise<boolean> {
+  const bcrypt = await import("bcryptjs").then((m) => m.default ?? m);
   return bcrypt.compareSync(password, hashed);
 }
 

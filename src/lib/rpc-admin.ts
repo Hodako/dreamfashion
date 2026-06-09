@@ -14,7 +14,7 @@ async function ensureSuperAdmin() {
     await db.collection("super_admins").insertOne({
       _id: "superadmin",
       username: "superadmin",
-      password: hashPassword("superadmin123"),
+      password: await hashPassword("superadmin123"),
       created_at: new Date().toISOString(),
     });
   }
@@ -36,7 +36,7 @@ export const superAdminLoginFn = createServerFn({ method: "POST" })
     await ensureSuperAdmin();
     const db = await getDb();
     const admin = await db.collection("super_admins").findOne({ username: data.username });
-    if (!admin || !comparePassword(data.password, admin.password as string)) {
+    if (!admin || !(await comparePassword(data.password, admin.password as string))) {
       throw new Error("Invalid credentials");
     }
     const token = await signToken({ userId: "superadmin", email: "superadmin@hakimezy.local" });

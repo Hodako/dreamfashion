@@ -73,7 +73,7 @@ export const loginFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const db = await getDb();
     const user = await db.collection("users").findOne({ email: data.email.toLowerCase() });
-    if (!user || !comparePassword(data.password, user.password as string)) {
+    if (!user || !(await comparePassword(data.password, user.password as string))) {
       throw new Error("Invalid email or password");
     }
     const token = await signToken({ userId: user._id as string, email: user.email as string });
@@ -92,7 +92,7 @@ export const registerFn = createServerFn({ method: "POST" })
     await db.collection("users").insertOne({
       _id: userId,
       email: data.email.toLowerCase(),
-      password: hashPassword(data.password),
+      password: await hashPassword(data.password),
       full_name: data.fullName || "",
       role: "owner",
       activated: false,
