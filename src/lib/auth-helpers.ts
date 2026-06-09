@@ -32,13 +32,13 @@ export async function verifyToken(token: string) {
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  const bcrypt = await import("bcryptjs").then((m) => m.default ?? m);
-  return bcrypt.hashSync(password, 10);
+  const { hashSync } = await import("bcrypt-ts");
+  return hashSync(password, 10);
 }
 
 export async function comparePassword(password: string, hashed: string): Promise<boolean> {
-  const bcrypt = await import("bcryptjs").then((m) => m.default ?? m);
-  return bcrypt.compareSync(password, hashed);
+  const { compareSync } = await import("bcrypt-ts");
+  return compareSync(password, hashed);
 }
 
 /** Parse cookies from a Request object */
