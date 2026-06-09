@@ -1,0 +1,1 @@
+import{a as o,j as e,N as t}from"./index-BYwVAXxg.js";import{S as s}from"./speed-loader-Dg9S0EZh.js";function i(){const{user:r,loading:a}=o();return a?e.jsx(s,{}):r?r.activated?e.jsx(t,{to:"/dashboard",replace:!0}):e.jsx(t,{to:"/activate",replace:!0}):e.jsx(t,{to:"/auth",replace:!0})}export{i as component};
