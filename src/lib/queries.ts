@@ -1,74 +1,79 @@
-import { supabase } from "@/integrations/supabase/client";
+import {
+  getProductsFn,
+  getPartiesFn,
+  getSalesFn,
+  getSalesForPartyFn,
+  getPurchasesFn,
+  getExpensesFn,
+  getSomitiFn,
+  getWithdrawalsFn,
+  getPaymentsForPartyFn,
+  getAllPaymentsFn,
+  getAllPartyReceivablesFn,
+  getPartyReceivablesFn,
+  getPartyPayablesFn,
+  getPayableSettlementsFn,
+  getReturnsFn,
+  getPartyFn,
+  getCashboxFn,
+} from "@/lib/rpc";
 
+// ─── Types ───────────────────────────────────────────────────────────────────
 export type Product = {
   id: string; name: string; image_url: string | null;
   buy_price: number; sell_price: number; stock: number; created_at: string;
 };
 export type Party = { id: string; name: string; phone: string | null; created_at: string };
 export type Sale = {
-  id: string; product_id: string | null; product_name: string; qty: number;
-  buy_price: number; sell_price: number; profit: number;
-  type: "cash" | "credit"; party_id: string | null;
+  id: string; product_id: string | null; product_name: string;
+  qty: number; buy_price: number; sell_price: number; profit: number;
+  type: "cash" | "credit" | "online"; party_id: string | null;
   paid_amount: number; due_amount: number; created_at: string;
+  returned?: boolean; return_qty?: number;
   parties?: { name: string } | null;
 };
 export type Payment = { id: string; party_id: string; amount: number; note: string | null; created_at: string };
-export type Purchase = { id: string; product_id: string | null; product_name: string; qty: number; unit_cost: number; total: number; note: string | null; created_at: string };
+export type PartyLedger = { id: string; party_id: string; amount: number; note: string | null; created_at: string };
+export type Return = {
+  id: string; sale_id: string; product_id: string; product_name: string;
+  qty: number; note: string | null; created_at: string;
+};
+export type Purchase = {
+  id: string; product_id: string | null; product_name: string;
+  qty: number; unit_cost: number; total: number; note: string | null; created_at: string;
+};
 export type Expense = { id: string; title: string; amount: number; note: string | null; created_at: string };
 export type Somiti = { id: string; kind: "deposit" | "withdraw"; amount: number; note: string | null; created_at: string };
 export type Withdrawal = { id: string; amount: number; note: string | null; created_at: string };
+export type CashboxEntry = {
+  id: string;
+  kind: "deposit" | "withdraw" | "sale" | "expense";
+  amount: number;
+  note: string | null;
+  ref_id?: string | null;
+  created_at: string;
+};
 
-export async function getProducts(): Promise<Product[]> {
-  const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as Product[];
-}
-export async function getParties(): Promise<Party[]> {
-  const { data, error } = await supabase.from("parties").select("*").order("name");
-  if (error) throw error;
-  return (data ?? []) as Party[];
-}
-export async function getSales(): Promise<Sale[]> {
-  const { data, error } = await supabase
-    .from("sales").select("*, parties(name)")
-    .order("created_at", { ascending: false }).limit(200);
-  if (error) throw error;
-  return (data ?? []) as Sale[];
-}
-export async function getPurchases(): Promise<Purchase[]> {
-  const { data, error } = await supabase.from("purchases").select("*").order("created_at", { ascending: false }).limit(200);
-  if (error) throw error;
-  return (data ?? []) as Purchase[];
-}
-export async function getExpenses(): Promise<Expense[]> {
-  const { data, error } = await supabase.from("expenses").select("*").order("created_at", { ascending: false }).limit(200);
-  if (error) throw error;
-  return (data ?? []) as Expense[];
-}
-export async function getSomiti(): Promise<Somiti[]> {
-  const { data, error } = await supabase.from("somiti_entries").select("*").order("created_at", { ascending: false }).limit(200);
-  if (error) throw error;
-  return (data ?? []) as Somiti[];
-}
-export async function getWithdrawals(): Promise<Withdrawal[]> {
-  const { data, error } = await supabase.from("owner_withdrawals").select("*").order("created_at", { ascending: false }).limit(200);
-  if (error) throw error;
-  return (data ?? []) as Withdrawal[];
-}
-export async function getPaymentsForParty(partyId: string): Promise<Payment[]> {
-  const { data, error } = await supabase.from("payments").select("*").eq("party_id", partyId).order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as Payment[];
-}
-export async function getSalesForParty(partyId: string): Promise<Sale[]> {
-  const { data, error } = await supabase.from("sales").select("*").eq("party_id", partyId).order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as Sale[];
-}
+// ─── Query functions (called by react-query) ─────────────────────────────────
+export const getProducts = () => getProductsFn() as Promise<Product[]>;
+export const getParties = () => getPartiesFn() as Promise<Party[]>;
+export const getParty = (id: string) => getPartyFn({ data: { id } }) as Promise<Party | null>;
+export const getSales = () => getSalesFn() as Promise<Sale[]>;
+export const getPurchases = () => getPurchasesFn() as Promise<Purchase[]>;
+export const getExpenses = () => getExpensesFn() as Promise<Expense[]>;
+export const getSomiti = () => getSomitiFn() as Promise<Somiti[]>;
+export const getWithdrawals = () => getWithdrawalsFn() as Promise<Withdrawal[]>;
+export const getCashbox = () => getCashboxFn() as Promise<CashboxEntry[]>;
+export const getSalesForParty = (partyId: string) => getSalesForPartyFn({ data: { partyId } }) as Promise<Sale[]>;
+export const getPaymentsForParty = (partyId: string) => getPaymentsForPartyFn({ data: { partyId } }) as Promise<Payment[]>;
+export const getAllPayments = () => getAllPaymentsFn() as Promise<Payment[]>;
+export const getAllPartyReceivables = () => getAllPartyReceivablesFn() as Promise<PartyLedger[]>;
+export const getPartyReceivables = (partyId: string) => getPartyReceivablesFn({ data: { partyId } }) as Promise<PartyLedger[]>;
+export const getPartyPayables = (partyId: string) => getPartyPayablesFn({ data: { partyId } }) as Promise<PartyLedger[]>;
+export const getPayableSettlements = (partyId: string) => getPayableSettlementsFn({ data: { partyId } }) as Promise<PartyLedger[]>;
+export const getReturns = () => getReturnsFn() as Promise<Return[]>;
 
-/** Get signed url for an image stored under product-images bucket. */
+/** In ImgBB configuration, the path is already a direct URL string. */
 export async function signedImage(path: string | null): Promise<string | null> {
-  if (!path) return null;
-  const { data } = await supabase.storage.from("product-images").createSignedUrl(path, 3600);
-  return data?.signedUrl ?? null;
+  return path || null;
 }

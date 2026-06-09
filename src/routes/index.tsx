@@ -1,5 +1,6 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
+import { SpeedLoader } from "@/components/speed-loader";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -8,6 +9,10 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const { user, loading } = useAuth();
-  if (loading) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">…</div>;
-  return <Navigate to={user ? "/dashboard" : "/auth"} replace />;
+
+  if (loading) return <SpeedLoader />;
+
+  if (!user) return <Navigate to="/auth" replace />;
+  if (!user.activated) return <Navigate to="/activate" replace />;
+  return <Navigate to="/dashboard" replace />;
 }

@@ -9,22 +9,41 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as Whois2uperadminRouteImport } from './routes/whois2uperadmin'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ActivateRouteImport } from './routes/activate'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedTrackbackRouteImport } from './routes/_authenticated/trackback'
 import { Route as AuthenticatedSomitiRouteImport } from './routes/_authenticated/somiti'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSalesRouteImport } from './routes/_authenticated/sales'
 import { Route as AuthenticatedPurchasesRouteImport } from './routes/_authenticated/purchases'
 import { Route as AuthenticatedProductsRouteImport } from './routes/_authenticated/products'
 import { Route as AuthenticatedPartiesRouteImport } from './routes/_authenticated/parties'
+import { Route as AuthenticatedOnlineSellsRouteImport } from './routes/_authenticated/online-sells'
 import { Route as AuthenticatedMoreRouteImport } from './routes/_authenticated/more'
 import { Route as AuthenticatedExpensesRouteImport } from './routes/_authenticated/expenses'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedCashManagementRouteImport } from './routes/_authenticated/cash-management'
+import { Route as AuthenticatedPartiesIndexRouteImport } from './routes/_authenticated/parties.index'
+import { Route as AuthenticatedCashManagementIndexRouteImport } from './routes/_authenticated/cash-management.index'
 import { Route as AuthenticatedPartiesIdRouteImport } from './routes/_authenticated/parties.$id'
+import { Route as AuthenticatedCashManagementCashboxRouteImport } from './routes/_authenticated/cash-management.cashbox'
 
+const Whois2uperadminRoute = Whois2uperadminRouteImport.update({
+  id: '/whois2uperadmin',
+  path: '/whois2uperadmin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ActivateRoute = ActivateRouteImport.update({
+  id: '/activate',
+  path: '/activate',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -36,9 +55,19 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedTrackbackRoute = AuthenticatedTrackbackRouteImport.update({
+  id: '/trackback',
+  path: '/trackback',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedSomitiRoute = AuthenticatedSomitiRouteImport.update({
   id: '/somiti',
   path: '/somiti',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSalesRoute = AuthenticatedSalesRouteImport.update({
@@ -61,6 +90,12 @@ const AuthenticatedPartiesRoute = AuthenticatedPartiesRouteImport.update({
   path: '/parties',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedOnlineSellsRoute =
+  AuthenticatedOnlineSellsRouteImport.update({
+    id: '/online-sells',
+    path: '/online-sells',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedMoreRoute = AuthenticatedMoreRouteImport.update({
   id: '/more',
   path: '/more',
@@ -76,109 +111,199 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCashManagementRoute =
+  AuthenticatedCashManagementRouteImport.update({
+    id: '/cash-management',
+    path: '/cash-management',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPartiesIndexRoute =
+  AuthenticatedPartiesIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedPartiesRoute,
+  } as any)
+const AuthenticatedCashManagementIndexRoute =
+  AuthenticatedCashManagementIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedCashManagementRoute,
+  } as any)
 const AuthenticatedPartiesIdRoute = AuthenticatedPartiesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => AuthenticatedPartiesRoute,
 } as any)
+const AuthenticatedCashManagementCashboxRoute =
+  AuthenticatedCashManagementCashboxRouteImport.update({
+    id: '/cashbox',
+    path: '/cashbox',
+    getParentRoute: () => AuthenticatedCashManagementRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/activate': typeof ActivateRoute
   '/auth': typeof AuthRoute
+  '/whois2uperadmin': typeof Whois2uperadminRoute
+  '/cash-management': typeof AuthenticatedCashManagementRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/expenses': typeof AuthenticatedExpensesRoute
   '/more': typeof AuthenticatedMoreRoute
+  '/online-sells': typeof AuthenticatedOnlineSellsRoute
   '/parties': typeof AuthenticatedPartiesRouteWithChildren
   '/products': typeof AuthenticatedProductsRoute
   '/purchases': typeof AuthenticatedPurchasesRoute
   '/sales': typeof AuthenticatedSalesRoute
+  '/settings': typeof AuthenticatedSettingsRoute
   '/somiti': typeof AuthenticatedSomitiRoute
+  '/trackback': typeof AuthenticatedTrackbackRoute
+  '/cash-management/cashbox': typeof AuthenticatedCashManagementCashboxRoute
   '/parties/$id': typeof AuthenticatedPartiesIdRoute
+  '/cash-management/': typeof AuthenticatedCashManagementIndexRoute
+  '/parties/': typeof AuthenticatedPartiesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/activate': typeof ActivateRoute
   '/auth': typeof AuthRoute
+  '/whois2uperadmin': typeof Whois2uperadminRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/expenses': typeof AuthenticatedExpensesRoute
   '/more': typeof AuthenticatedMoreRoute
-  '/parties': typeof AuthenticatedPartiesRouteWithChildren
+  '/online-sells': typeof AuthenticatedOnlineSellsRoute
   '/products': typeof AuthenticatedProductsRoute
   '/purchases': typeof AuthenticatedPurchasesRoute
   '/sales': typeof AuthenticatedSalesRoute
+  '/settings': typeof AuthenticatedSettingsRoute
   '/somiti': typeof AuthenticatedSomitiRoute
+  '/trackback': typeof AuthenticatedTrackbackRoute
+  '/cash-management/cashbox': typeof AuthenticatedCashManagementCashboxRoute
   '/parties/$id': typeof AuthenticatedPartiesIdRoute
+  '/cash-management': typeof AuthenticatedCashManagementIndexRoute
+  '/parties': typeof AuthenticatedPartiesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/activate': typeof ActivateRoute
   '/auth': typeof AuthRoute
+  '/whois2uperadmin': typeof Whois2uperadminRoute
+  '/_authenticated/cash-management': typeof AuthenticatedCashManagementRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/expenses': typeof AuthenticatedExpensesRoute
   '/_authenticated/more': typeof AuthenticatedMoreRoute
+  '/_authenticated/online-sells': typeof AuthenticatedOnlineSellsRoute
   '/_authenticated/parties': typeof AuthenticatedPartiesRouteWithChildren
   '/_authenticated/products': typeof AuthenticatedProductsRoute
   '/_authenticated/purchases': typeof AuthenticatedPurchasesRoute
   '/_authenticated/sales': typeof AuthenticatedSalesRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/somiti': typeof AuthenticatedSomitiRoute
+  '/_authenticated/trackback': typeof AuthenticatedTrackbackRoute
+  '/_authenticated/cash-management/cashbox': typeof AuthenticatedCashManagementCashboxRoute
   '/_authenticated/parties/$id': typeof AuthenticatedPartiesIdRoute
+  '/_authenticated/cash-management/': typeof AuthenticatedCashManagementIndexRoute
+  '/_authenticated/parties/': typeof AuthenticatedPartiesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/activate'
     | '/auth'
+    | '/whois2uperadmin'
+    | '/cash-management'
     | '/dashboard'
     | '/expenses'
     | '/more'
+    | '/online-sells'
     | '/parties'
     | '/products'
     | '/purchases'
     | '/sales'
+    | '/settings'
     | '/somiti'
+    | '/trackback'
+    | '/cash-management/cashbox'
     | '/parties/$id'
+    | '/cash-management/'
+    | '/parties/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/activate'
     | '/auth'
+    | '/whois2uperadmin'
     | '/dashboard'
     | '/expenses'
     | '/more'
-    | '/parties'
+    | '/online-sells'
     | '/products'
     | '/purchases'
     | '/sales'
+    | '/settings'
     | '/somiti'
+    | '/trackback'
+    | '/cash-management/cashbox'
     | '/parties/$id'
+    | '/cash-management'
+    | '/parties'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/activate'
     | '/auth'
+    | '/whois2uperadmin'
+    | '/_authenticated/cash-management'
     | '/_authenticated/dashboard'
     | '/_authenticated/expenses'
     | '/_authenticated/more'
+    | '/_authenticated/online-sells'
     | '/_authenticated/parties'
     | '/_authenticated/products'
     | '/_authenticated/purchases'
     | '/_authenticated/sales'
+    | '/_authenticated/settings'
     | '/_authenticated/somiti'
+    | '/_authenticated/trackback'
+    | '/_authenticated/cash-management/cashbox'
     | '/_authenticated/parties/$id'
+    | '/_authenticated/cash-management/'
+    | '/_authenticated/parties/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  ActivateRoute: typeof ActivateRoute
   AuthRoute: typeof AuthRoute
+  Whois2uperadminRoute: typeof Whois2uperadminRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/whois2uperadmin': {
+      id: '/whois2uperadmin'
+      path: '/whois2uperadmin'
+      fullPath: '/whois2uperadmin'
+      preLoaderRoute: typeof Whois2uperadminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/activate': {
+      id: '/activate'
+      path: '/activate'
+      fullPath: '/activate'
+      preLoaderRoute: typeof ActivateRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -195,11 +320,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/trackback': {
+      id: '/_authenticated/trackback'
+      path: '/trackback'
+      fullPath: '/trackback'
+      preLoaderRoute: typeof AuthenticatedTrackbackRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/somiti': {
       id: '/_authenticated/somiti'
       path: '/somiti'
       fullPath: '/somiti'
       preLoaderRoute: typeof AuthenticatedSomitiRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/sales': {
@@ -230,6 +369,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPartiesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/online-sells': {
+      id: '/_authenticated/online-sells'
+      path: '/online-sells'
+      fullPath: '/online-sells'
+      preLoaderRoute: typeof AuthenticatedOnlineSellsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/more': {
       id: '/_authenticated/more'
       path: '/more'
@@ -251,6 +397,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/cash-management': {
+      id: '/_authenticated/cash-management'
+      path: '/cash-management'
+      fullPath: '/cash-management'
+      preLoaderRoute: typeof AuthenticatedCashManagementRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/parties/': {
+      id: '/_authenticated/parties/'
+      path: '/'
+      fullPath: '/parties/'
+      preLoaderRoute: typeof AuthenticatedPartiesIndexRouteImport
+      parentRoute: typeof AuthenticatedPartiesRoute
+    }
+    '/_authenticated/cash-management/': {
+      id: '/_authenticated/cash-management/'
+      path: '/'
+      fullPath: '/cash-management/'
+      preLoaderRoute: typeof AuthenticatedCashManagementIndexRouteImport
+      parentRoute: typeof AuthenticatedCashManagementRoute
+    }
     '/_authenticated/parties/$id': {
       id: '/_authenticated/parties/$id'
       path: '/$id'
@@ -258,40 +425,76 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPartiesIdRouteImport
       parentRoute: typeof AuthenticatedPartiesRoute
     }
+    '/_authenticated/cash-management/cashbox': {
+      id: '/_authenticated/cash-management/cashbox'
+      path: '/cashbox'
+      fullPath: '/cash-management/cashbox'
+      preLoaderRoute: typeof AuthenticatedCashManagementCashboxRouteImport
+      parentRoute: typeof AuthenticatedCashManagementRoute
+    }
   }
 }
 
+interface AuthenticatedCashManagementRouteChildren {
+  AuthenticatedCashManagementCashboxRoute: typeof AuthenticatedCashManagementCashboxRoute
+  AuthenticatedCashManagementIndexRoute: typeof AuthenticatedCashManagementIndexRoute
+}
+
+const AuthenticatedCashManagementRouteChildren: AuthenticatedCashManagementRouteChildren =
+  {
+    AuthenticatedCashManagementCashboxRoute:
+      AuthenticatedCashManagementCashboxRoute,
+    AuthenticatedCashManagementIndexRoute:
+      AuthenticatedCashManagementIndexRoute,
+  }
+
+const AuthenticatedCashManagementRouteWithChildren =
+  AuthenticatedCashManagementRoute._addFileChildren(
+    AuthenticatedCashManagementRouteChildren,
+  )
+
 interface AuthenticatedPartiesRouteChildren {
   AuthenticatedPartiesIdRoute: typeof AuthenticatedPartiesIdRoute
+  AuthenticatedPartiesIndexRoute: typeof AuthenticatedPartiesIndexRoute
 }
 
 const AuthenticatedPartiesRouteChildren: AuthenticatedPartiesRouteChildren = {
   AuthenticatedPartiesIdRoute: AuthenticatedPartiesIdRoute,
+  AuthenticatedPartiesIndexRoute: AuthenticatedPartiesIndexRoute,
 }
 
 const AuthenticatedPartiesRouteWithChildren =
   AuthenticatedPartiesRoute._addFileChildren(AuthenticatedPartiesRouteChildren)
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedCashManagementRoute: typeof AuthenticatedCashManagementRouteWithChildren
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedExpensesRoute: typeof AuthenticatedExpensesRoute
   AuthenticatedMoreRoute: typeof AuthenticatedMoreRoute
+  AuthenticatedOnlineSellsRoute: typeof AuthenticatedOnlineSellsRoute
   AuthenticatedPartiesRoute: typeof AuthenticatedPartiesRouteWithChildren
   AuthenticatedProductsRoute: typeof AuthenticatedProductsRoute
   AuthenticatedPurchasesRoute: typeof AuthenticatedPurchasesRoute
   AuthenticatedSalesRoute: typeof AuthenticatedSalesRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSomitiRoute: typeof AuthenticatedSomitiRoute
+  AuthenticatedTrackbackRoute: typeof AuthenticatedTrackbackRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedCashManagementRoute:
+    AuthenticatedCashManagementRouteWithChildren,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedExpensesRoute: AuthenticatedExpensesRoute,
   AuthenticatedMoreRoute: AuthenticatedMoreRoute,
+  AuthenticatedOnlineSellsRoute: AuthenticatedOnlineSellsRoute,
   AuthenticatedPartiesRoute: AuthenticatedPartiesRouteWithChildren,
   AuthenticatedProductsRoute: AuthenticatedProductsRoute,
   AuthenticatedPurchasesRoute: AuthenticatedPurchasesRoute,
   AuthenticatedSalesRoute: AuthenticatedSalesRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSomitiRoute: AuthenticatedSomitiRoute,
+  AuthenticatedTrackbackRoute: AuthenticatedTrackbackRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -300,7 +503,9 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  ActivateRoute: ActivateRoute,
   AuthRoute: AuthRoute,
+  Whois2uperadminRoute: Whois2uperadminRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,123 +1,203 @@
 import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ProductSearchSelect } from "@/components/product-search";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase } from "@/integrations/supabase/client";
+import { useCachedQuery } from "@/hooks/use-cached-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
 import { getParties, getProducts, type Product } from "@/lib/queries";
 import { fmtMoney } from "@/lib/format";
+import { createSaleFn } from "@/lib/rpc";
+import { Plus, Trash2 } from "lucide-react";
+
+type CartLine = { productId: string; qty: string; sellPrice: string };
 
 export function SaleDialog({
   open, onOpenChange, presetType, presetProductId,
 }: {
   open: boolean; onOpenChange: (v: boolean) => void;
-  presetType?: "cash" | "credit"; presetProductId?: string;
+  presetType?: "cash" | "credit" | "online"; presetProductId?: string;
 }) {
   const { t } = useT();
   const { user } = useAuth();
   const qc = useQueryClient();
-  const products = useQuery({ queryKey: ["products"], queryFn: getProducts });
-  const parties = useQuery({ queryKey: ["parties"], queryFn: getParties });
+  const { data: products = [] } = useCachedQuery(["products"], getProducts);
+  const { data: parties = [] } = useCachedQuery(["parties"], getParties);
 
-  const [type, setType] = useState<"cash" | "credit">(presetType ?? "cash");
-  const [productId, setProductId] = useState<string>("");
-  const [qty, setQty] = useState("1");
-  const [partyId, setPartyId] = useState<string>("");
+  const [type, setType] = useState<"cash" | "credit" | "online">(presetType ?? "cash");
+  const [partyId, setPartyId] = useState("");
   const [paid, setPaid] = useState("");
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [draft, setDraft] = useState<CartLine>({ productId: "", qty: "1", sellPrice: "" });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (open) {
       setType(presetType ?? "cash");
-      setProductId(presetProductId ?? "");
-      setQty("1"); setPartyId(""); setPaid("");
+      setPartyId("");
+      setPaid("");
+      setCart(presetProductId ? [{ productId: presetProductId, qty: "1", sellPrice: "" }] : []);
+      setDraft({ productId: "", qty: "1", sellPrice: "" });
     }
   }, [open, presetType, presetProductId]);
 
-  const product: Product | undefined = products.data?.find(p => p.id === productId);
-  const qtyNum = Number(qty) || 0;
-  const sellTotal = (product?.sell_price ?? 0) * qtyNum;
-  const buyTotal = (product?.buy_price ?? 0) * qtyNum;
-  const profit = sellTotal - buyTotal;
-  const paidNum = type === "cash" ? sellTotal : Number(paid) || 0;
+  useEffect(() => {
+    if (draft.productId && !draft.sellPrice) {
+      const p = products.find(x => x.id === draft.productId);
+      if (p && p.sell_price > 0) setDraft(d => ({ ...d, sellPrice: String(p.sell_price) }));
+    }
+  }, [draft.productId, draft.sellPrice, products]);
+
+  function lineTotal(line: CartLine) {
+    const p = products.find(x => x.id === line.productId);
+    if (!p) return 0;
+    const sell = Number(line.sellPrice) || p.sell_price || 0;
+    return sell * (Number(line.qty) || 0);
+  }
+
+  const sellTotal = cart.reduce((a, l) => a + lineTotal(l), 0);
+  const profitTotal = cart.reduce((a, l) => {
+    const p = products.find(x => x.id === l.productId);
+    if (!p) return a;
+    const sell = Number(l.sellPrice) || p.sell_price || 0;
+    const qty = Number(l.qty) || 0;
+    return a + (sell - p.buy_price) * qty;
+  }, 0);
+  const paidNum = (type === "cash" || type === "online") ? sellTotal : Number(paid) || 0;
   const due = Math.max(sellTotal - paidNum, 0);
+
+  function addToCart() {
+    if (!draft.productId) return toast.error(t("select_product"));
+    const qty = Number(draft.qty) || 0;
+    if (qty <= 0) return;
+    const sell = Number(draft.sellPrice);
+    if (!sell || sell <= 0) return toast.error(t("sell_price") + " " + t("required"));
+    setCart(prev => [...prev, { ...draft }]);
+    setDraft({ productId: "", qty: "1", sellPrice: "" });
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!user || !product) return;
+    if (!user || cart.length === 0) return toast.error(t("select_product"));
     if (type === "credit" && !partyId) return toast.error(t("party") + " " + t("required"));
     setBusy(true);
     try {
-      const { error } = await supabase.from("sales").insert({
-        owner_id: user.id, product_id: product.id, product_name: product.name,
-        qty: qtyNum, buy_price: product.buy_price, sell_price: product.sell_price,
-        profit, type, party_id: type === "credit" ? partyId : null,
-        paid_amount: paidNum, due_amount: due,
-      });
-      if (error) throw error;
-      // Decrement stock
-      await supabase.from("products").update({ stock: Math.max((product.stock ?? 0) - qtyNum, 0) }).eq("id", product.id);
+      const duePerItem = type === "credit" ? due / cart.length : 0;
+      const paidPerItem = type === "credit" ? paidNum / cart.length : 0;
+
+      for (const line of cart) {
+        const product = products.find(p => p.id === line.productId)!;
+        const qtyNum = Number(line.qty) || 0;
+        const sellPrice = Number(line.sellPrice) || product.sell_price || 0;
+        const lineSell = sellPrice * qtyNum;
+        const lineProfit = (sellPrice - product.buy_price) * qtyNum;
+
+        await createSaleFn({
+          data: {
+            product_id: product.id,
+            product_name: product.name,
+            qty: qtyNum,
+            buy_price: product.buy_price,
+            sell_price: sellPrice,
+            profit: lineProfit,
+            type,
+            party_id: type === "credit" ? partyId : null,
+            paid_amount: type === "credit" ? paidPerItem : lineSell,
+            due_amount: type === "credit" ? duePerItem : 0,
+          },
+        });
+      }
+
       toast.success(t("record_sale"));
       qc.invalidateQueries({ queryKey: ["sales"] });
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["party-detail"] });
+      qc.invalidateQueries({ queryKey: ["cashbox"] });
       onOpenChange(false);
-    } catch (err: any) {
-      toast.error(err.message ?? String(err));
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : String(err));
     } finally { setBusy(false); }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
         <DialogHeader><DialogTitle>{t("new_sale")}</DialogTitle></DialogHeader>
         <form onSubmit={submit} className="space-y-3">
-          <Tabs value={type} onValueChange={(v)=>setType(v as any)}>
-            <TabsList className="grid grid-cols-2 w-full">
+          <Tabs value={type} onValueChange={(v) => setType(v as "cash" | "credit" | "online")}>
+            <TabsList className="grid grid-cols-3 w-full">
               <TabsTrigger value="cash">{t("cash_sale")}</TabsTrigger>
               <TabsTrigger value="credit">{t("credit_sale")}</TabsTrigger>
+              <TabsTrigger value="online">{t("online_sell")}</TabsTrigger>
             </TabsList>
           </Tabs>
-          <Field label={t("select_product")}>
-            <Select value={productId} onValueChange={setProductId}>
-              <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-              <SelectContent>
-                {products.data?.map(p => <SelectItem key={p.id} value={p.id}>{p.name} · {fmtMoney(p.sell_price)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={t("qty")}><Input inputMode="numeric" value={qty} onChange={e=>setQty(e.target.value)} /></Field>
-            <Field label={t("profit")}><div className="h-9 px-3 grid items-center rounded-md bg-success/10 text-success font-semibold">{fmtMoney(profit)}</div></Field>
+
+          <div className="border border-border rounded-lg p-3 space-y-2">
+            <Field label={t("select_product")}>
+              <ProductSearchSelect products={products} value={draft.productId} onChange={v => setDraft(d => ({ ...d, productId: v }))} />
+            </Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label={t("qty")}><Input inputMode="numeric" value={draft.qty} onChange={e => setDraft(d => ({ ...d, qty: e.target.value }))} /></Field>
+              <Field label={t("sell_price")}><Input inputMode="decimal" placeholder="0" value={draft.sellPrice} onChange={e => setDraft(d => ({ ...d, sellPrice: e.target.value }))} /></Field>
+            </div>
+            <Button type="button" variant="outline" size="sm" className="w-full" onClick={addToCart}>
+              <Plus className="size-3.5 mr-1" />{t("add_to_cart")}
+            </Button>
           </div>
+
+          {cart.length > 0 && (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">{t("cart")} ({cart.length})</Label>
+              {cart.map((line, i) => {
+                const p = products.find(x => x.id === line.productId);
+                return (
+                  <div key={i} className="flex items-center justify-between text-xs border border-border rounded-md px-2 py-1.5">
+                    <span className="truncate flex-1">{p?.name} ×{line.qty}</span>
+                    <span className="font-medium mx-2">{fmtMoney(lineTotal(line))}</span>
+                    <Button type="button" variant="ghost" size="icon" className="size-6 shrink-0" onClick={() => setCart(prev => prev.filter((_, idx) => idx !== i))}>
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {type === "credit" && (
             <>
               <Field label={t("party")}>
                 <Select value={partyId} onValueChange={setPartyId}>
                   <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
                   <SelectContent>
-                    {parties.data?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    {parties.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </Field>
               <div className="grid grid-cols-2 gap-3">
-                <Field label={t("paid_amount")}><Input inputMode="decimal" value={paid} onChange={e=>setPaid(e.target.value)} /></Field>
-                <Field label={t("due_amount")}><div className="h-9 px-3 grid items-center rounded-md bg-warning/10 text-foreground font-semibold">{fmtMoney(due)}</div></Field>
+                <Field label={t("paid_amount")}><Input inputMode="decimal" value={paid} onChange={e => setPaid(e.target.value)} /></Field>
+                <Field label={t("due_amount")}><div className="h-9 px-3 grid items-center rounded-md bg-warning/10 font-semibold text-sm">{fmtMoney(due)}</div></Field>
               </div>
             </>
           )}
-          <div className="flex items-center justify-between text-sm text-muted-foreground border-t border-border pt-3">
-            <span>{t("total")}</span><span className="font-semibold text-foreground">{fmtMoney(sellTotal)}</span>
+
+          <div className="flex items-center justify-between text-sm border-t border-border pt-3">
+            <span className="text-muted-foreground">{t("total")}</span>
+            <span className="font-semibold">{fmtMoney(sellTotal)}</span>
           </div>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>{t("profit")}</span>
+            <span className="text-success font-medium">{fmtMoney(profitTotal)}</span>
+          </div>
+
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t("cancel")}</Button>
-            <Button type="submit" disabled={busy || !product}>{busy?"…":t("record_sale")}</Button>
+            <Button type="submit" disabled={busy || cart.length === 0}>{busy ? "…" : t("record_sale")}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
