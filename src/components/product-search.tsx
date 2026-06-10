@@ -41,7 +41,7 @@ export function ProductSearchSelect({ products, value, onChange, showPrice, plac
               {products.map(p => (
                 <CommandItem
                   key={p.id}
-                  value={p.name}
+                  value={`${p.name} ${p.id}`.toLowerCase()}
                   onSelect={() => { onChange(p.id); setOpen(false); }}
                 >
                   <Check className={cn("mr-2 size-4", value === p.id ? "opacity-100" : "opacity-0")} />
