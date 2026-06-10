@@ -1,1 +1,0 @@
-function e(t){const i=typeof t=="string"?Number(t):t??0;return Number.isFinite(i)?"৳"+i.toLocaleString("en-IN",{maximumFractionDigits:2}):"৳0"}function n(t){return(typeof t=="string"?new Date(t):t).toLocaleString(void 0,{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}export{e as a,n as f};

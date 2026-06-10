@@ -1,1 +1,0 @@
-import{w as i}from"./use-cached-query-CZzZMpRp.js";function n(e,a,t){e.setQueryData(a,t);const r=e.getQueryData(a);r!==void 0&&i(a,r)}async function o(e,...a){await Promise.all(a.map(t=>e.invalidateQueries({queryKey:t}).then(()=>e.refetchQueries({queryKey:t,type:"active"}))))}export{o as r,n as s};

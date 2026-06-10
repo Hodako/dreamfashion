@@ -17,17 +17,23 @@ async function getClient(): Promise<MongoClient> {
   // Dynamic import so mongodb is never bundled for the browser
   const { MongoClient } = await import("mongodb");
 
+  const options = {
+    serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+  };
+
   if (process.env.NODE_ENV === "development") {
     // Reuse connection across HMR reloads
     const g = global as typeof globalThis & {
       _mongoClientPromise?: Promise<MongoClient>;
     };
     if (!g._mongoClientPromise) {
-      g._mongoClientPromise = new MongoClient(uri).connect();
+      g._mongoClientPromise = new MongoClient(uri, options).connect();
     }
     _clientPromise = g._mongoClientPromise;
   } else {
-    _clientPromise = new MongoClient(uri).connect();
+    _clientPromise = new MongoClient(uri, options).connect();
   }
 
   return _clientPromise;
