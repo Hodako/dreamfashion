@@ -1,5 +1,8 @@
+"use client";
+
 import { useEffect } from "react";
-import { Link, useRouterState, Outlet, useNavigate, Navigate } from "@tanstack/react-router";
+import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { getProducts, getParties, getSales } from "@/lib/queries";
 import {
@@ -85,12 +88,12 @@ function filterGroups(groups: NavGroup[], perms: PermissionSet): NavGroup[] {
     .filter(g => g.items.length > 0);
 }
 
-export function AppShell() {
+export function AppShell({ children }: { children: React.ReactNode }) {
   const { t, lang, setLang } = useT();
   const { resolved, toggle } = useTheme();
   const { user, loading, logout } = useAuth();
-  const navigate = useNavigate();
-  const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const router = useRouter();
+  const pathname = usePathname() || "";
   const isMobile = useIsMobile();
   const qc = useQueryClient();
 
@@ -104,8 +107,14 @@ export function AppShell() {
     }
   }, [user?.activated, user?.role, user?.permissions, qc]);
 
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/auth");
+    }
+  }, [user, loading, router]);
+
   if (loading && !user) return <SpeedLoader />;
-  if (!user) return <Navigate to="/auth" replace />;
+  if (!user) return null;
 
   const perms = resolvePermissions(user.role, user.permissions);
   const sidebarGroups = filterGroups(desktopNavGroups, perms);
@@ -115,7 +124,7 @@ export function AppShell() {
 
   async function handleSignOut() {
     await logout();
-    navigate({ to: "/auth", replace: true });
+    router.replace("/auth");
   }
 
   function isActive(to: string) {
@@ -147,7 +156,7 @@ export function AppShell() {
                         <SidebarMenuButton
                           isActive={isActive(to)}
                           tooltip={t(labelKey)}
-                          onClick={() => navigate({ to })}
+                          onClick={() => router.push(to)}
                         >
                           <Icon className="icon-sm" />
                           <span>{t(labelKey)}</span>
@@ -252,7 +261,7 @@ export function AppShell() {
         <main className={`flex-1 min-h-0 overflow-y-auto overscroll-y-contain ${isMobile ? "px-3 pt-3" : "px-6 py-5"}`}>
           <div className={isMobile ? "w-full max-w-lg mx-auto mobile-content-pad" : "w-full max-w-screen-2xl mx-auto"}>
             <PermissionGuard>
-              <Outlet />
+              {children}
             </PermissionGuard>
           </div>
           {isMobile && <div className="mobile-bottom-spacer" aria-hidden />}
@@ -270,7 +279,7 @@ export function AppShell() {
               return (
                 <Link
                   key={to}
-                  to={to}
+                  href={to}
                   className={`flex flex-col items-center justify-center gap-0.5 text-[9px] font-medium transition-colors active:scale-95 ${
                     active ? "text-primary" : "text-muted-foreground"
                   }`}

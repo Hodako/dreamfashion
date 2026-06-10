@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Search, Package, Users, ShoppingBag, Receipt, Settings, BarChart3, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,7 @@ interface UniversalSearchProps {
 
 export function UniversalSearch({ role, permissions }: UniversalSearchProps) {
   const { t } = useT();
-  const navigate = useNavigate();
+  const router = useRouter();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -84,7 +84,7 @@ export function UniversalSearch({ role, permissions }: UniversalSearchProps) {
   function go(to: string) {
     setOpen(false);
     setQuery("");
-    navigate({ to });
+    router.push(to);
   }
 
   return (

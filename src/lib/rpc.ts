@@ -1,5 +1,6 @@
-import { createServerFn } from "@tanstack/react-start";
-import { getCookie, setCookie, deleteCookie } from "@tanstack/react-start/server";
+"use server";
+
+import { cookies } from "next/headers";
 import { getDb } from "@/lib/db";
 import { hashPassword, comparePassword, signToken, verifyToken } from "@/lib/auth-helpers";
 import { requireSession } from "@/lib/session";
@@ -54,9 +55,10 @@ async function mapUser(db: Awaited<ReturnType<typeof getDb>>, userId: string) {
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
-export const getMeFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function getMeFn() {
   try {
-    const token = getCookie("token");
+    const cookieStore = await cookies();
+    const token = cookieStore.get("token")?.value;
     if (!token) return { user: null };
     const session = await verifyToken(token);
     if (!session) return { user: null };
@@ -66,529 +68,500 @@ export const getMeFn = createServerFn({ method: "GET" }).handler(async () => {
   } catch {
     return { user: null };
   }
-});
+}
 
-export const loginFn = createServerFn({ method: "POST" })
-  .validator((d: { email: string; password: string }) => d)
-  .handler(async ({ data }) => {
-    const db = await getDb();
-    const user = await db.collection("users").findOne({ email: data.email.toLowerCase() });
-    if (!user || !(await comparePassword(data.password, user.password as string))) {
-      throw new Error("Invalid email or password");
-    }
-    const token = await signToken({ userId: user._id as string, email: user.email as string });
-    setCookie("token", token, { maxAge: 30 * 24 * 60 * 60, httpOnly: true, sameSite: "lax", path: "/" });
-    const mapped = await mapUser(db, user._id as string);
-    return { user: mapped };
+export async function loginFn(input: { data: { email: string; password: string } }) {
+  const { data } = input;
+  const db = await getDb();
+  const user = await db.collection("users").findOne({ email: data.email.toLowerCase() });
+  if (!user || !(await comparePassword(data.password, user.password as string))) {
+    throw new Error("Invalid email or password");
+  }
+  const token = await signToken({ userId: user._id as string, email: user.email as string });
+  const cookieStore = await cookies();
+  cookieStore.set("token", token, { maxAge: 30 * 24 * 60 * 60, httpOnly: true, sameSite: "lax", path: "/" });
+  const mapped = await mapUser(db, user._id as string);
+  return { user: mapped };
+}
+
+export async function registerFn(input: { data: { email: string; password: string; fullName?: string } }) {
+  const { data } = input;
+  const db = await getDb();
+  const existing = await db.collection("users").findOne({ email: data.email.toLowerCase() });
+  if (existing) throw new Error("User already exists");
+  const userId = crypto.randomUUID();
+  await db.collection("users").insertOne({
+    _id: userId,
+    email: data.email.toLowerCase(),
+    password: await hashPassword(data.password),
+    full_name: data.fullName || "",
+    role: "owner",
+    activated: false,
+    created_at: new Date().toISOString(),
   });
+  const token = await signToken({ userId, email: data.email.toLowerCase() });
+  const cookieStore = await cookies();
+  cookieStore.set("token", token, { maxAge: 30 * 24 * 60 * 60, httpOnly: true, sameSite: "lax", path: "/" });
+  const mapped = await mapUser(db, userId);
+  return { user: mapped };
+}
 
-export const registerFn = createServerFn({ method: "POST" })
-  .validator((d: { email: string; password: string; fullName?: string }) => d)
-  .handler(async ({ data }) => {
-    const db = await getDb();
-    const existing = await db.collection("users").findOne({ email: data.email.toLowerCase() });
-    if (existing) throw new Error("User already exists");
-    const userId = crypto.randomUUID();
-    await db.collection("users").insertOne({
-      _id: userId,
-      email: data.email.toLowerCase(),
-      password: await hashPassword(data.password),
-      full_name: data.fullName || "",
-      role: "owner",
-      activated: false,
-      created_at: new Date().toISOString(),
-    });
-    const token = await signToken({ userId, email: data.email.toLowerCase() });
-    setCookie("token", token, { maxAge: 30 * 24 * 60 * 60, httpOnly: true, sameSite: "lax", path: "/" });
-    const mapped = await mapUser(db, userId);
-    return { user: mapped };
-  });
-
-export const logoutFn = createServerFn({ method: "POST" }).handler(async () => {
-  deleteCookie("token");
+export async function logoutFn() {
+  const cookieStore = await cookies();
+  cookieStore.delete("token");
   return { success: true };
-});
+}
 
 // ─── Products ────────────────────────────────────────────────────────────────
 
-export const getProductsFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function getProductsFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("products").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).toArray();
   return items.map((p) => ({ ...p, id: p._id as string }));
-});
+}
 
-export const createProductFn = createServerFn({ method: "POST" })
-  .validator((d: { name: string; image_url?: string | null; buy_price?: number; sell_price?: number; stock?: number }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const id = crypto.randomUUID();
-    const doc = { _id: id, owner_id: session.ownerId, name: data.name, image_url: data.image_url || null, buy_price: data.buy_price || 0, sell_price: data.sell_price || 0, stock: data.stock || 0, created_at: new Date().toISOString() };
-    await db.collection("products").insertOne(doc);
-    return { ...doc, id };
-  });
+export async function createProductFn(input: { data: { name: string; image_url?: string | null; buy_price?: number; sell_price?: number; stock?: number } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  const doc = { _id: id, owner_id: session.ownerId, name: data.name, image_url: data.image_url || null, buy_price: data.buy_price || 0, sell_price: data.sell_price || 0, stock: data.stock || 0, created_at: new Date().toISOString() };
+  await db.collection("products").insertOne(doc);
+  return { ...doc, id };
+}
 
-export const updateProductFn = createServerFn({ method: "POST" })
-  .validator((d: { id: string; name?: string; image_url?: string | null; buy_price?: number; sell_price?: number; stock?: number }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const { id, ...updates } = data;
-    const db = await getDb();
-    await db.collection("products").updateOne({ _id: id, owner_id: session.ownerId }, { $set: updates });
-    const updated = await db.collection("products").findOne({ _id: id });
-    return { ...updated, id };
-  });
+export async function updateProductFn(input: { data: { id: string; name?: string; image_url?: string | null; buy_price?: number; sell_price?: number; stock?: number } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const { id, ...updates } = data;
+  const db = await getDb();
+  await db.collection("products").updateOne({ _id: id, owner_id: session.ownerId }, { $set: updates });
+  const updated = await db.collection("products").findOne({ _id: id });
+  return { ...updated, id };
+}
 
-export const deleteProductFn = createServerFn({ method: "POST" })
-  .validator((d: { id: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    await db.collection("products").deleteOne({ _id: data.id, owner_id: session.ownerId });
-    return { success: true };
-  });
+export async function deleteProductFn(input: { data: { id: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  await db.collection("products").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  return { success: true };
+}
 
 // ─── Parties ─────────────────────────────────────────────────────────────────
 
-export const getPartiesFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function getPartiesFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("parties").find({ owner_id: session.ownerId }).sort({ name: 1 }).toArray();
   return items.map((p) => ({ ...p, id: p._id as string }));
-});
+}
 
-export const createPartyFn = createServerFn({ method: "POST" })
-  .validator((d: { name: string; phone?: string | null }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const id = crypto.randomUUID();
-    const doc = { _id: id, owner_id: session.ownerId, name: data.name, phone: data.phone || null, created_at: new Date().toISOString() };
-    await db.collection("parties").insertOne(doc);
-    return { ...doc, id };
-  });
+export async function createPartyFn(input: { data: { name: string; phone?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  const doc = { _id: id, owner_id: session.ownerId, name: data.name, phone: data.phone || null, created_at: new Date().toISOString() };
+  await db.collection("parties").insertOne(doc);
+  return { ...doc, id };
+}
 
-export const updatePartyFn = createServerFn({ method: "POST" })
-  .validator((d: { id: string; name?: string; phone?: string | null }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const { id, ...updates } = data;
-    const db = await getDb();
-    await db.collection("parties").updateOne({ _id: id, owner_id: session.ownerId }, { $set: updates });
-    const updated = await db.collection("parties").findOne({ _id: id });
-    return { ...updated, id };
-  });
+export async function updatePartyFn(input: { data: { id: string; name?: string; phone?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const { id, ...updates } = data;
+  const db = await getDb();
+  await db.collection("parties").updateOne({ _id: id, owner_id: session.ownerId }, { $set: updates });
+  const updated = await db.collection("parties").findOne({ _id: id });
+  return { ...updated, id };
+}
 
-export const deletePartyFn = createServerFn({ method: "POST" })
-  .validator((d: { id: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    await db.collection("parties").deleteOne({ _id: data.id, owner_id: session.ownerId });
-    return { success: true };
-  });
+export async function deletePartyFn(input: { data: { id: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  await db.collection("parties").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  return { success: true };
+}
 
-export const getPartyFn = createServerFn({ method: "POST" })
-  .validator((d: { id: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const p = await db.collection("parties").findOne({ _id: data.id, owner_id: session.ownerId });
-    if (!p) return null;
-    return { ...p, id: p._id as string };
-  });
+export async function getPartyFn(input: { data: { id: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const p = await db.collection("parties").findOne({ _id: data.id, owner_id: session.ownerId });
+  if (!p) return null;
+  return { ...p, id: p._id as string };
+}
 
-export const createPartyReceivableFn = createServerFn({ method: "POST" })
-  .validator((d: { party_id: string; amount: number; note?: string | null }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const id = crypto.randomUUID();
-    const doc = { _id: id, owner_id: session.ownerId, party_id: data.party_id, amount: data.amount, note: data.note || null, created_at: new Date().toISOString() };
-    await db.collection("party_receivables").insertOne(doc);
-    return { ...doc, id };
-  });
+export async function createPartyReceivableFn(input: { data: { party_id: string; amount: number; note?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  const doc = { _id: id, owner_id: session.ownerId, party_id: data.party_id, amount: data.amount, note: data.note || null, created_at: new Date().toISOString() };
+  await db.collection("party_receivables").insertOne(doc);
+  return { ...doc, id };
+}
 
-export const createPartyPayableFn = createServerFn({ method: "POST" })
-  .validator((d: { party_id: string; amount: number; note?: string | null }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const id = crypto.randomUUID();
-    const doc = { _id: id, owner_id: session.ownerId, party_id: data.party_id, amount: data.amount, note: data.note || null, created_at: new Date().toISOString() };
-    await db.collection("party_payables").insertOne(doc);
-    return { ...doc, id };
-  });
+export async function createPartyPayableFn(input: { data: { party_id: string; amount: number; note?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  const doc = { _id: id, owner_id: session.ownerId, party_id: data.party_id, amount: data.amount, note: data.note || null, created_at: new Date().toISOString() };
+  await db.collection("party_payables").insertOne(doc);
+  return { ...doc, id };
+}
 
-export const getAllPartyReceivablesFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function getAllPartyReceivablesFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("party_receivables").find({ owner_id: session.ownerId }).toArray();
   return items.map((r) => ({ ...r, id: r._id as string }));
-});
+}
 
-export const getPartyReceivablesFn = createServerFn({ method: "POST" })
-  .validator((d: { partyId: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const items = await db.collection("party_receivables").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
-    return items.map((r) => ({ ...r, id: r._id as string }));
-  });
+export async function getPartyReceivablesFn(input: { data: { partyId: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const items = await db.collection("party_receivables").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
+  return items.map((r) => ({ ...r, id: r._id as string }));
+}
 
-export const getPartyPayablesFn = createServerFn({ method: "POST" })
-  .validator((d: { partyId: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const items = await db.collection("party_payables").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
-    return items.map((r) => ({ ...r, id: r._id as string }));
-  });
+export async function getPartyPayablesFn(input: { data: { partyId: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const items = await db.collection("party_payables").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
+  return items.map((r) => ({ ...r, id: r._id as string }));
+}
 
-export const deletePartyReceivableFn = createServerFn({ method: "POST" })
-  .validator((d: { id: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    await db.collection("party_receivables").deleteOne({ _id: data.id, owner_id: session.ownerId });
-    return { success: true };
-  });
+export async function deletePartyReceivableFn(input: { data: { id: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  await db.collection("party_receivables").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  return { success: true };
+}
 
-export const deletePartyPayableFn = createServerFn({ method: "POST" })
-  .validator((d: { id: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    await db.collection("party_payables").deleteOne({ _id: data.id, owner_id: session.ownerId });
-    return { success: true };
-  });
+export async function deletePartyPayableFn(input: { data: { id: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  await db.collection("party_payables").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  return { success: true };
+}
 
-export const createPayableSettlementFn = createServerFn({ method: "POST" })
-  .validator((d: { party_id: string; amount: number; note?: string | null }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const id = crypto.randomUUID();
-    const doc = { _id: id, owner_id: session.ownerId, party_id: data.party_id, amount: data.amount, note: data.note || null, created_at: new Date().toISOString() };
-    await db.collection("party_payable_settlements").insertOne(doc);
-    return { ...doc, id };
-  });
+export async function createPayableSettlementFn(input: { data: { party_id: string; amount: number; note?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  const doc = { _id: id, owner_id: session.ownerId, party_id: data.party_id, amount: data.amount, note: data.note || null, created_at: new Date().toISOString() };
+  await db.collection("party_payable_settlements").insertOne(doc);
+  return { ...doc, id };
+}
 
-export const getPayableSettlementsFn = createServerFn({ method: "POST" })
-  .validator((d: { partyId: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const items = await db.collection("party_payable_settlements").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
-    return items.map((r) => ({ ...r, id: r._id as string }));
-  });
+export async function getPayableSettlementsFn(input: { data: { partyId: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const items = await db.collection("party_payable_settlements").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
+  return items.map((r) => ({ ...r, id: r._id as string }));
+}
 
 // ─── Sales ───────────────────────────────────────────────────────────────────
 
-export const getSalesFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function getSalesFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("sales").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
   return items.map((s) => ({ ...s, id: s._id as string }));
-});
+}
 
-export const getSalesForPartyFn = createServerFn({ method: "POST" })
-  .validator((d: { partyId: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const items = await db.collection("sales").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
-    return items.map((s) => ({ ...s, id: s._id as string }));
-  });
+export async function getSalesForPartyFn(input: { data: { partyId: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const items = await db.collection("sales").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
+  return items.map((s) => ({ ...s, id: s._id as string }));
+}
 
-export const createSaleFn = createServerFn({ method: "POST" })
-  .validator((d: { product_id?: string | null; product_name: string; qty: number; buy_price: number; sell_price: number; profit: number; type: string; party_id?: string | null; paid_amount: number; due_amount: number; note?: string | null }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const id = crypto.randomUUID();
-    const doc = { _id: id, owner_id: session.ownerId, ...data, party_id: data.type === "credit" ? data.party_id : null, created_at: new Date().toISOString() };
-    await db.collection("sales").insertOne(doc);
-    if (data.product_id) {
-      const product = await db.collection("products").findOne({ _id: data.product_id });
-      if (product) await db.collection("products").updateOne({ _id: data.product_id }, { $set: { stock: Math.max(((product.stock as number) ?? 0) - data.qty, 0) } });
-    }
-    const cashAmt = saleCashboxAmount(data);
-    if (cashAmt > 0) {
-      await insertCashboxEntry(db, session.ownerId, {
-        kind: "sale",
-        amount: cashAmt,
-        note: `Sale: ${data.product_name}`,
-        ref_id: id,
-      });
-    }
-    return { ...doc, id };
-  });
+export async function createSaleFn(input: { data: { product_id?: string | null; product_name: string; qty: number; buy_price: number; sell_price: number; profit: number; type: string; party_id?: string | null; paid_amount: number; due_amount: number; note?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  const doc = { _id: id, owner_id: session.ownerId, ...data, party_id: data.type === "credit" ? data.party_id : null, created_at: new Date().toISOString() };
+  await db.collection("sales").insertOne(doc);
+  if (data.product_id) {
+    const product = await db.collection("products").findOne({ _id: data.product_id });
+    if (product) await db.collection("products").updateOne({ _id: data.product_id }, { $set: { stock: Math.max(((product.stock as number) ?? 0) - data.qty, 0) } });
+  }
+  const cashAmt = saleCashboxAmount(data);
+  if (cashAmt > 0) {
+    await insertCashboxEntry(db, session.ownerId, {
+      kind: "sale",
+      amount: cashAmt,
+      note: `Sale: ${data.product_name}`,
+      ref_id: id,
+    });
+  }
+  return { ...doc, id };
+}
 
-export const deleteSaleFn = createServerFn({ method: "POST" })
-  .validator((d: { id: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const sale = await db.collection("sales").findOne({ _id: data.id, owner_id: session.ownerId });
-    if (!sale) throw new Error("Sale not found");
-    if (sale.returned) throw new Error("Already returned");
-    await db.collection("cashbox_entries").deleteOne({ owner_id: session.ownerId, ref_id: data.id, kind: "sale" });
-    await db.collection("sales").deleteOne({ _id: data.id, owner_id: session.ownerId });
-    return { success: true };
-  });
+export async function deleteSaleFn(input: { data: { id: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const sale = await db.collection("sales").findOne({ _id: data.id, owner_id: session.ownerId });
+  if (!sale) throw new Error("Sale not found");
+  if (sale.returned) throw new Error("Already returned");
+  await db.collection("cashbox_entries").deleteOne({ owner_id: session.ownerId, ref_id: data.id, kind: "sale" });
+  await db.collection("sales").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  return { success: true };
+}
 
-export const createReturnFn = createServerFn({ method: "POST" })
-  .validator((d: { sale_id: string; qty: number; note?: string | null }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const sale = await db.collection("sales").findOne({ _id: data.sale_id, owner_id: session.ownerId });
-    if (!sale) throw new Error("Sale not found");
-    if (!sale.product_id) throw new Error("Cannot return non-product sale");
-    if (sale.returned) throw new Error("Already returned");
-    const returnQty = Math.min(data.qty, sale.qty as number);
-    if (returnQty <= 0) throw new Error("Invalid quantity");
+export async function createReturnFn(input: { data: { sale_id: string; qty: number; note?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const sale = await db.collection("sales").findOne({ _id: data.sale_id, owner_id: session.ownerId });
+  if (!sale) throw new Error("Sale not found");
+  if (!sale.product_id) throw new Error("Cannot return non-product sale");
+  if (sale.returned) throw new Error("Already returned");
+  const returnQty = Math.min(data.qty, sale.qty as number);
+  if (returnQty <= 0) throw new Error("Invalid quantity");
 
-    const id = crypto.randomUUID();
-    const profitPerUnit = (sale.profit as number) / (sale.qty as number);
-    const doc = {
-      _id: id, owner_id: session.ownerId, sale_id: data.sale_id,
-      product_id: sale.product_id, product_name: sale.product_name,
-      qty: returnQty, note: data.note || null, created_at: new Date().toISOString(),
-    };
-    await db.collection("returns").insertOne(doc);
+  const id = crypto.randomUUID();
+  const profitPerUnit = (sale.profit as number) / (sale.qty as number);
+  const doc = {
+    _id: id, owner_id: session.ownerId, sale_id: data.sale_id,
+    product_id: sale.product_id, product_name: sale.product_name,
+    qty: returnQty, note: data.note || null, created_at: new Date().toISOString(),
+  };
+  await db.collection("returns").insertOne(doc);
 
-    const product = await db.collection("products").findOne({ _id: sale.product_id });
-    if (product) {
-      await db.collection("products").updateOne(
-        { _id: sale.product_id },
-        { $set: { stock: ((product.stock as number) ?? 0) + returnQty } },
-      );
-    }
+  const product = await db.collection("products").findOne({ _id: sale.product_id });
+  if (product) {
+    await db.collection("products").updateOne(
+      { _id: sale.product_id },
+      { $set: { stock: ((product.stock as number) ?? 0) + returnQty } },
+    );
+  }
 
-    if (returnQty >= (sale.qty as number)) {
-      await db.collection("sales").updateOne({ _id: data.sale_id }, { $set: { returned: true, return_qty: returnQty } });
-    } else {
-      const remaining = (sale.qty as number) - returnQty;
-      await db.collection("sales").updateOne(
-        { _id: data.sale_id },
-        { $set: { qty: remaining, profit: profitPerUnit * remaining, return_qty: returnQty } },
-      );
-    }
-    return { ...doc, id };
-  });
+  if (returnQty >= (sale.qty as number)) {
+    await db.collection("sales").updateOne({ _id: data.sale_id }, { $set: { returned: true, return_qty: returnQty } });
+  } else {
+    const remaining = (sale.qty as number) - returnQty;
+    await db.collection("sales").updateOne(
+      { _id: data.sale_id },
+      { $set: { qty: remaining, profit: profitPerUnit * remaining, return_qty: returnQty } },
+    );
+  }
+  return { ...doc, id };
+}
 
-export const getReturnsFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function getReturnsFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("returns").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
   return items.map((r) => ({ ...r, id: r._id as string }));
-});
+}
 
 // ─── Purchases ───────────────────────────────────────────────────────────────
 
-export const getPurchasesFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function getPurchasesFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("purchases").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
   return items.map((p) => ({ ...p, id: p._id as string }));
-});
+}
 
-export const createPurchaseFn = createServerFn({ method: "POST" })
-  .validator((d: { product_id?: string | null; product_name: string; qty: number; unit_cost: number; sell_price?: number; total: number; note?: string | null }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const id = crypto.randomUUID();
-    const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
-    await db.collection("purchases").insertOne(doc);
-    if (data.product_id) {
-      const product = await db.collection("products").findOne({ _id: data.product_id });
-      if (product) {
-        const updates: Record<string, number> = {
-          stock: ((product.stock as number) ?? 0) + data.qty,
-          buy_price: data.unit_cost,
-        };
-        if (data.sell_price != null && data.sell_price > 0) {
-          updates.sell_price = data.sell_price;
-        }
-        await db.collection("products").updateOne({ _id: data.product_id }, { $set: updates });
+export async function createPurchaseFn(input: { data: { product_id?: string | null; product_name: string; qty: number; unit_cost: number; sell_price?: number; total: number; note?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
+  await db.collection("purchases").insertOne(doc);
+  if (data.product_id) {
+    const product = await db.collection("products").findOne({ _id: data.product_id });
+    if (product) {
+      const updates: Record<string, number> = {
+        stock: ((product.stock as number) ?? 0) + data.qty,
+        buy_price: data.unit_cost,
+      };
+      if (data.sell_price != null && data.sell_price > 0) {
+        updates.sell_price = data.sell_price;
       }
+      await db.collection("products").updateOne({ _id: data.product_id }, { $set: updates });
     }
-    return { ...doc, id };
-  });
+  }
+  return { ...doc, id };
+}
 
-export const deletePurchaseFn = createServerFn({ method: "POST" })
-  .validator((d: { id: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const purchase = await db.collection("purchases").findOne({ _id: data.id, owner_id: session.ownerId });
-    if (!purchase) throw new Error("Purchase not found");
-    if (purchase.product_id) {
-      const product = await db.collection("products").findOne({ _id: purchase.product_id });
-      if (product) {
-        await db.collection("products").updateOne(
-          { _id: purchase.product_id },
-          { $set: { stock: Math.max(((product.stock as number) ?? 0) - (purchase.qty as number), 0) } },
-        );
-      }
+export async function deletePurchaseFn(input: { data: { id: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const purchase = await db.collection("purchases").findOne({ _id: data.id, owner_id: session.ownerId });
+  if (!purchase) throw new Error("Purchase not found");
+  if (purchase.product_id) {
+    const product = await db.collection("products").findOne({ _id: purchase.product_id });
+    if (product) {
+      await db.collection("products").updateOne(
+        { _id: purchase.product_id },
+        { $set: { stock: Math.max(((product.stock as number) ?? 0) - (purchase.qty as number), 0) } },
+      );
     }
-    await db.collection("purchases").deleteOne({ _id: data.id, owner_id: session.ownerId });
-    return { success: true };
-  });
+  }
+  await db.collection("purchases").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  return { success: true };
+}
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
 
-export const getExpensesFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function getExpensesFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("expenses").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
   return items.map((e) => ({ ...e, id: e._id as string }));
-});
+}
 
-export const createExpenseFn = createServerFn({ method: "POST" })
-  .validator((d: { title: string; amount: number; note?: string | null }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const id = crypto.randomUUID();
-    const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
-    await db.collection("expenses").insertOne(doc);
-    await insertCashboxEntry(db, session.ownerId, {
-      kind: "expense",
-      amount: data.amount,
-      note: data.title,
-      ref_id: id,
-    });
-    return { ...doc, id };
+export async function createExpenseFn(input: { data: { title: string; amount: number; note?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
+  await db.collection("expenses").insertOne(doc);
+  await insertCashboxEntry(db, session.ownerId, {
+    kind: "expense",
+    amount: data.amount,
+    note: data.title,
+    ref_id: id,
   });
+  return { ...doc, id };
+}
 
-export const deleteExpenseFn = createServerFn({ method: "POST" })
-  .validator((d: { id: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    await db.collection("cashbox_entries").deleteOne({ owner_id: session.ownerId, ref_id: data.id, kind: "expense" });
-    await db.collection("expenses").deleteOne({ _id: data.id, owner_id: session.ownerId });
-    return { success: true };
-  });
+export async function deleteExpenseFn(input: { data: { id: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  await db.collection("cashbox_entries").deleteOne({ owner_id: session.ownerId, ref_id: data.id, kind: "expense" });
+  await db.collection("expenses").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  return { success: true };
+}
 
 // ─── Payments ─────────────────────────────────────────────────────────────────
 
-export const getPaymentsForPartyFn = createServerFn({ method: "POST" })
-  .validator((d: { partyId: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const items = await db.collection("payments").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
-    return items.map((p) => ({ ...p, id: p._id as string }));
-  });
+export async function getPaymentsForPartyFn(input: { data: { partyId: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const items = await db.collection("payments").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
+  return items.map((p) => ({ ...p, id: p._id as string }));
+}
 
-export const getAllPaymentsFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function getAllPaymentsFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("payments").find({ owner_id: session.ownerId }).toArray();
   return items.map((p) => ({ ...p, id: p._id as string }));
-});
+}
 
-export const createPaymentFn = createServerFn({ method: "POST" })
-  .validator((d: { party_id: string; amount: number; note?: string | null }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const id = crypto.randomUUID();
-    const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
-    await db.collection("payments").insertOne(doc);
-    return { ...doc, id };
-  });
+export async function createPaymentFn(input: { data: { party_id: string; amount: number; note?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
+  await db.collection("payments").insertOne(doc);
+  return { ...doc, id };
+}
 
-export const deletePaymentFn = createServerFn({ method: "POST" })
-  .validator((d: { id: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    await db.collection("payments").deleteOne({ _id: data.id, owner_id: session.ownerId });
-    return { success: true };
-  });
+export async function deletePaymentFn(input: { data: { id: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  await db.collection("payments").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  return { success: true };
+}
 
 // ─── Somiti ───────────────────────────────────────────────────────────────────
 
-export const getSomitiFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function getSomitiFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("somiti_entries").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
   return items.map((s) => ({ ...s, id: s._id as string }));
-});
+}
 
-export const createSomitiFn = createServerFn({ method: "POST" })
-  .validator((d: { kind: string; amount: number; note?: string | null }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const id = crypto.randomUUID();
-    const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
-    await db.collection("somiti_entries").insertOne(doc);
-    return { ...doc, id };
-  });
+export async function createSomitiFn(input: { data: { kind: string; amount: number; note?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
+  await db.collection("somiti_entries").insertOne(doc);
+  return { ...doc, id };
+}
 
 // ─── Withdrawals ──────────────────────────────────────────────────────────────
 
-export const getWithdrawalsFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function getWithdrawalsFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("owner_withdrawals").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
   return items.map((w) => ({ ...w, id: w._id as string }));
-});
+}
 
-export const createWithdrawalFn = createServerFn({ method: "POST" })
-  .validator((d: { amount: number; note?: string | null }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const id = crypto.randomUUID();
-    const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
-    await db.collection("owner_withdrawals").insertOne(doc);
-    return { ...doc, id };
-  });
+export async function createWithdrawalFn(input: { data: { amount: number; note?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
+  await db.collection("owner_withdrawals").insertOne(doc);
+  return { ...doc, id };
+}
 
 // ─── Cashbox ──────────────────────────────────────────────────────────────────
 
-export const getCashboxFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function getCashboxFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("cashbox_entries").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
   return items.map((e) => ({ ...e, id: e._id as string }));
-});
+}
 
-export const createCashboxFn = createServerFn({ method: "POST" })
-  .validator((d: { kind: "deposit" | "withdraw"; amount: number; note?: string | null }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    const db = await getDb();
-    const saved = await insertCashboxEntry(db, session.ownerId, {
-      kind: data.kind,
-      amount: data.amount,
-      note: data.note ?? null,
-    });
-    return saved;
+export async function createCashboxFn(input: { data: { kind: "deposit" | "withdraw"; amount: number; note?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const saved = await insertCashboxEntry(db, session.ownerId, {
+    kind: data.kind,
+    amount: data.amount,
+    note: data.note ?? null,
   });
+  return saved;
+}
 
 // ─── Upload ───────────────────────────────────────────────────────────────────
 
-export const uploadImageFn = createServerFn({ method: "POST" })
-  .validator((d: { base64: string; fileName?: string }) => d)
-  .handler(async ({ data }) => {
-    await requireSession();
-    const apiKey = process.env.IMGBB_API_KEY;
-    if (!apiKey) throw new Error("IMGBB_API_KEY is not configured");
-    const form = new FormData();
-    form.append("image", data.base64);
-    const res = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, { method: "POST", body: form });
-    if (!res.ok) throw new Error("Image upload failed");
-    const json = await res.json();
-    if (!json.success) throw new Error(json.error?.message || "Upload failed");
-    return { url: json.data.url as string };
-  });
+export async function uploadImageFn(input: { data: { base64: string; fileName?: string } }) {
+  const { data } = input;
+  await requireSession();
+  const apiKey = process.env.IMGBB_API_KEY;
+  if (!apiKey) throw new Error("IMGBB_API_KEY is not configured");
+  const form = new FormData();
+  form.append("image", data.base64);
+  const res = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, { method: "POST", body: form });
+  if (!res.ok) throw new Error("Image upload failed");
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error?.message || "Upload failed");
+  return { url: json.data.url as string };
+}

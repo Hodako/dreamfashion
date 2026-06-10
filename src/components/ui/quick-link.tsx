@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link } from "@tanstack/react-router";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 export interface QuickLinkProps {
@@ -8,12 +8,12 @@ export interface QuickLinkProps {
   label: string;
 }
 
-export const QuickLink = React.forwardRef<HTMLDivElement, QuickLinkProps>(
+export const QuickLink = React.forwardRef<HTMLAnchorElement, QuickLinkProps>(
   ({ to, icon: Icon, label }, ref) => {
     return (
       <Link
         ref={ref}
-        to={to}
+        href={to}
         className="rounded-2xl bg-card border border-border p-3 flex flex-col items-center gap-1 text-xs font-medium hover:border-primary transition"
       >
         <Icon className="size-5 text-primary" />

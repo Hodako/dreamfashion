@@ -1,4 +1,4 @@
-import { getCookie } from "@tanstack/react-start/server";
+import { cookies } from "next/headers";
 import { getDb } from "@/lib/db";
 import { verifyToken } from "@/lib/auth-helpers";
 import type { PermissionSet } from "@/lib/permissions";
@@ -15,7 +15,8 @@ export type AppSession = {
 };
 
 export async function requireSession(requireActivated = true): Promise<AppSession> {
-  const token = getCookie("token");
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
   if (!token) throw new Error("Unauthorized");
   const payload = await verifyToken(token);
   if (!payload) throw new Error("Unauthorized");

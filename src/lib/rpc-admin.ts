@@ -1,5 +1,6 @@
-import { createServerFn } from "@tanstack/react-start";
-import { getCookie, setCookie, deleteCookie } from "@tanstack/react-start/server";
+"use server";
+
+import { cookies } from "next/headers";
 import { getDb } from "@/lib/db";
 import { hashPassword, comparePassword, signToken, verifyToken } from "@/lib/auth-helpers";
 import { requireSession, generateLicenseKey } from "@/lib/session";
@@ -21,7 +22,8 @@ async function ensureSuperAdmin() {
 }
 
 async function requireSuperAdminSession() {
-  const token = getCookie("super_token");
+  const cookieStore = await cookies();
+  const token = cookieStore.get("super_token")?.value;
   if (!token) throw new Error("Unauthorized");
   const payload = await verifyToken(token);
   if (!payload || payload.userId !== "superadmin") throw new Error("Unauthorized");
@@ -30,148 +32,147 @@ async function requireSuperAdminSession() {
 
 // ─── Super Admin Auth ────────────────────────────────────────────────────────
 
-export const superAdminLoginFn = createServerFn({ method: "POST" })
-  .validator((d: { username: string; password: string }) => d)
-  .handler(async ({ data }) => {
-    await ensureSuperAdmin();
-    const db = await getDb();
-    const admin = await db.collection("super_admins").findOne({ username: data.username });
-    if (!admin || !(await comparePassword(data.password, admin.password as string))) {
-      throw new Error("Invalid credentials");
-    }
-    const token = await signToken({ userId: "superadmin", email: "superadmin@hakimezy.local" });
-    setCookie("super_token", token, { maxAge: 8 * 60 * 60, httpOnly: true, sameSite: "lax", path: "/" });
-    return { success: true };
-  });
-
-export const superAdminLogoutFn = createServerFn({ method: "POST" }).handler(async () => {
-  deleteCookie("super_token");
+export async function superAdminLoginFn(input: { data: { username: string; password: string } }) {
+  const { data } = input;
+  await ensureSuperAdmin();
+  const db = await getDb();
+  const admin = await db.collection("super_admins").findOne({ username: data.username });
+  if (!admin || !(await comparePassword(data.password, admin.password as string))) {
+    throw new Error("Invalid credentials");
+  }
+  const token = await signToken({ userId: "superadmin", email: "superadmin@hakimezy.local" });
+  const cookieStore = await cookies();
+  cookieStore.set("super_token", token, { maxAge: 8 * 60 * 60, httpOnly: true, sameSite: "lax", path: "/" });
   return { success: true };
-});
+}
 
-export const superAdminCheckFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function superAdminLogoutFn() {
+  const cookieStore = await cookies();
+  cookieStore.delete("super_token");
+  return { success: true };
+}
+
+export async function superAdminCheckFn() {
   try {
     await requireSuperAdminSession();
     return { authenticated: true };
   } catch {
     return { authenticated: false };
   }
-});
+}
 
-export const generatePlatformLicenseFn = createServerFn({ method: "POST" })
-  .validator((d: { employeeLimit?: number; note?: string }) => d)
-  .handler(async ({ data }) => {
-    await requireSuperAdminSession();
-    const db = await getDb();
-    const key = generateLicenseKey("HZ");
-    const doc = {
-      _id: key,
-      type: "platform",
-      employee_limit: data.employeeLimit ?? 5,
-      note: data.note || null,
-      used: false,
-      used_by: null,
-      created_at: new Date().toISOString(),
-    };
-    await db.collection("licenses").insertOne(doc);
-    return { key, employee_limit: doc.employee_limit };
-  });
+export async function generatePlatformLicenseFn(input: { data: { employeeLimit?: number; note?: string } }) {
+  const { data } = input;
+  await requireSuperAdminSession();
+  const db = await getDb();
+  const key = generateLicenseKey("HZ");
+  const doc = {
+    _id: key,
+    type: "platform",
+    employee_limit: data.employeeLimit ?? 5,
+    note: data.note || null,
+    used: false,
+    used_by: null,
+    created_at: new Date().toISOString(),
+  };
+  await db.collection("licenses").insertOne(doc);
+  return { key, employee_limit: doc.employee_limit };
+}
 
-export const listPlatformLicensesFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function listPlatformLicensesFn() {
   await requireSuperAdminSession();
   const db = await getDb();
   const items = await db.collection("licenses").find({ type: "platform" }).sort({ created_at: -1 }).limit(100).toArray();
   return items.map(l => ({ ...l, id: l._id as string }));
-});
+}
 
-export const listBusinessesFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function listBusinessesFn() {
   await requireSuperAdminSession();
   const db = await getDb();
   const items = await db.collection("businesses").find({}).sort({ created_at: -1 }).limit(100).toArray();
   return items.map(b => ({ ...b, id: b._id as string }));
-});
+}
 
 // ─── User activation & licenses ──────────────────────────────────────────────
 
-export const activateLicenseFn = createServerFn({ method: "POST" })
-  .validator((d: { licenseKey: string }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession(false);
-    if (session.activated) throw new Error("Already activated");
+export async function activateLicenseFn(input: { data: { licenseKey: string } }) {
+  const { data } = input;
+  const session = await requireSession(false);
+  if (session.activated) throw new Error("Already activated");
 
-    const db = await getDb();
-    const license = await db.collection("licenses").findOne({ _id: data.licenseKey.trim().toUpperCase() });
-    if (!license) throw new Error("Invalid license key");
-    if (license.used) throw new Error("License already used");
+  const db = await getDb();
+  const license = await db.collection("licenses").findOne({ _id: data.licenseKey.trim().toUpperCase() });
+  if (!license) throw new Error("Invalid license key");
+  if (license.used) throw new Error("License already used");
 
-    const now = new Date().toISOString();
+  const now = new Date().toISOString();
 
-    if (license.type === "platform") {
-      const businessId = crypto.randomUUID();
-      await db.collection("businesses").insertOne({
-        _id: businessId,
-        owner_id: session.userId,
-        name: DEFAULT_COMPANY,
-        logo_url: "/logo.png",
-        business_type: "retail",
-        theme: "green",
-        employee_limit: license.employee_limit ?? 5,
-        created_at: now,
-      });
-      await db.collection("users").updateOne(
-        { _id: session.userId },
-        {
-          $set: {
-            activated: true,
-            role: "owner",
-            business_id: businessId,
-            owner_id: session.userId,
-            permissions: OWNER_PERMISSIONS,
-            license_key: data.licenseKey,
-            activated_at: now,
-          },
+  if (license.type === "platform") {
+    const businessId = crypto.randomUUID();
+    await db.collection("businesses").insertOne({
+      _id: businessId,
+      owner_id: session.userId,
+      name: DEFAULT_COMPANY,
+      logo_url: "/logo.png",
+      business_type: "retail",
+      theme: "green",
+      employee_limit: license.employee_limit ?? 5,
+      created_at: now,
+    });
+    await db.collection("users").updateOne(
+      { _id: session.userId },
+      {
+        $set: {
+          activated: true,
+          role: "owner",
+          business_id: businessId,
+          owner_id: session.userId,
+          permissions: OWNER_PERMISSIONS,
+          license_key: data.licenseKey,
+          activated_at: now,
         },
-      );
-    } else if (license.type === "employee") {
-      const business = await db.collection("businesses").findOne({ _id: license.business_id });
-      if (!business) throw new Error("Business not found");
-      const employeeCount = await db.collection("users").countDocuments({
-        business_id: license.business_id,
-        role: "employee",
-        activated: true,
-      });
-      if (employeeCount >= (business.employee_limit as number)) {
-        throw new Error("Employee limit reached for this business");
-      }
-      await db.collection("users").updateOne(
-        { _id: session.userId },
-        {
-          $set: {
-            activated: true,
-            role: "employee",
-            business_id: license.business_id,
-            owner_id: license.owner_id,
-            permissions: license.permissions || DEFAULT_EMPLOYEE_PERMISSIONS,
-            license_key: data.licenseKey,
-            activated_at: now,
-          },
-        },
-      );
-    } else {
-      throw new Error("Invalid license type");
-    }
-
-    await db.collection("licenses").updateOne(
-      { _id: license._id },
-      { $set: { used: true, used_by: session.userId, used_at: now } },
+      },
     );
+  } else if (license.type === "employee") {
+    const business = await db.collection("businesses").findOne({ _id: license.business_id });
+    if (!business) throw new Error("Business not found");
+    const employeeCount = await db.collection("users").countDocuments({
+      business_id: license.business_id,
+      role: "employee",
+      activated: true,
+    });
+    if (employeeCount >= (business.employee_limit as number)) {
+      throw new Error("Employee limit reached for this business");
+    }
+    await db.collection("users").updateOne(
+      { _id: session.userId },
+      {
+        $set: {
+          activated: true,
+          role: "employee",
+          business_id: license.business_id,
+          owner_id: license.owner_id,
+          permissions: license.permissions || DEFAULT_EMPLOYEE_PERMISSIONS,
+          license_key: data.licenseKey,
+          activated_at: now,
+        },
+      },
+    );
+  } else {
+    throw new Error("Invalid license type");
+  }
 
-    return { success: true };
-  });
+  await db.collection("licenses").updateOne(
+    { _id: license._id },
+    { $set: { used: true, used_by: session.userId, used_at: now } },
+  );
+
+  return { success: true };
+}
 
 // ─── Business settings (owner) ───────────────────────────────────────────────
 
-export const getBusinessSettingsFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function getBusinessSettingsFn() {
   const session = await requireSession();
   const db = await getDb();
   let business = session.businessId
@@ -230,90 +231,87 @@ export const getBusinessSettingsFn = createServerFn({ method: "GET" }).handler(a
       created_at: l.created_at as string,
     })),
   };
-});
+}
 
-export const updateBusinessSettingsFn = createServerFn({ method: "POST" })
-  .validator((d: {
+export async function updateBusinessSettingsFn(input: {
+  data: {
     name?: string;
     logo_url?: string;
     business_type?: string;
     theme?: string;
     employee_limit?: number;
-  }) => d)
-  .handler(async ({ data }) => {
+  }
+}) {
+  const { data } = input;
+  const session = await requireSession();
+  if (session.role !== "owner") throw new Error("Only business owner can change settings");
+  const db = await getDb();
+  const business = await db.collection("businesses").findOne({ owner_id: session.ownerId });
+  if (!business) throw new Error("Business not found");
+  await db.collection("businesses").updateOne({ _id: business._id }, { $set: data });
+  return { success: true };
+}
+
+export async function createEmployeeLicenseFn(input: { data: { permissions?: PermissionSet } }) {
+  const { data } = input;
+  const session = await requireSession();
+  if (session.role !== "owner") throw new Error("Only owner can create employee licenses");
+  const db = await getDb();
+  const business = await db.collection("businesses").findOne({ owner_id: session.ownerId });
+  if (!business) throw new Error("Business not found");
+
+  const usedCount = await db.collection("licenses").countDocuments({
+    type: "employee",
+    business_id: business._id,
+  });
+  if (usedCount >= (business.employee_limit as number)) {
+    throw new Error("Employee license limit reached. Increase limit in settings.");
+  }
+
+  const key = generateLicenseKey("EMP");
+  await db.collection("licenses").insertOne({
+    _id: key,
+    type: "employee",
+    business_id: business._id,
+    owner_id: session.ownerId,
+    permissions: data.permissions || DEFAULT_EMPLOYEE_PERMISSIONS,
+    used: false,
+    used_by: null,
+    created_at: new Date().toISOString(),
+  });
+  return { key };
+}
+
+export async function updateEmployeePermissionsFn(input: { data: { employeeId: string; permissions: PermissionSet } }) {
+  const { data } = input;
+  const session = await requireSession();
+  if (session.role !== "owner") throw new Error("Only owner can update permissions");
+  const db = await getDb();
+  await db.collection("users").updateOne(
+    { _id: data.employeeId, owner_id: session.ownerId, role: "employee" },
+    { $set: { permissions: data.permissions } },
+  );
+  return { success: true };
+}
+
+export async function deleteLicenseFn(input: { data: { licenseKey: string } }) {
+  const { data } = input;
+  const db = await getDb();
+  const key = data.licenseKey.trim().toUpperCase();
+  const license = await db.collection("licenses").findOne({ _id: key });
+  if (!license) throw new Error("License not found");
+  if (license.used) throw new Error("Cannot delete a license that is already used");
+
+  if (license.type === "platform") {
+    await requireSuperAdminSession();
+  } else if (license.type === "employee") {
     const session = await requireSession();
-    if (session.role !== "owner") throw new Error("Only business owner can change settings");
-    const db = await getDb();
-    const business = await db.collection("businesses").findOne({ owner_id: session.ownerId });
-    if (!business) throw new Error("Business not found");
-    await db.collection("businesses").updateOne({ _id: business._id }, { $set: data });
-    return { success: true };
-  });
+    if (session.role !== "owner") throw new Error("Only owner can delete employee licenses");
+    if (license.owner_id !== session.ownerId) throw new Error("Not your license");
+  } else {
+    throw new Error("Invalid license type");
+  }
 
-export const createEmployeeLicenseFn = createServerFn({ method: "POST" })
-  .validator((d: { permissions?: PermissionSet }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    if (session.role !== "owner") throw new Error("Only owner can create employee licenses");
-    const db = await getDb();
-    const business = await db.collection("businesses").findOne({ owner_id: session.ownerId });
-    if (!business) throw new Error("Business not found");
-
-    const usedCount = await db.collection("licenses").countDocuments({
-      type: "employee",
-      business_id: business._id,
-    });
-    if (usedCount >= (business.employee_limit as number)) {
-      throw new Error("Employee license limit reached. Increase limit in settings.");
-    }
-
-    const key = generateLicenseKey("EMP");
-    await db.collection("licenses").insertOne({
-      _id: key,
-      type: "employee",
-      business_id: business._id,
-      owner_id: session.ownerId,
-      permissions: data.permissions || DEFAULT_EMPLOYEE_PERMISSIONS,
-      used: false,
-      used_by: null,
-      created_at: new Date().toISOString(),
-    });
-    return { key };
-  });
-
-export const updateEmployeePermissionsFn = createServerFn({ method: "POST" })
-  .validator((d: { employeeId: string; permissions: PermissionSet }) => d)
-  .handler(async ({ data }) => {
-    const session = await requireSession();
-    if (session.role !== "owner") throw new Error("Only owner can update permissions");
-    const db = await getDb();
-    await db.collection("users").updateOne(
-      { _id: data.employeeId, owner_id: session.ownerId, role: "employee" },
-      { $set: { permissions: data.permissions } },
-    );
-    return { success: true };
-  });
-
-/** Delete an unused license key (super admin: platform, owner: employee). */
-export const deleteLicenseFn = createServerFn({ method: "POST" })
-  .validator((d: { licenseKey: string }) => d)
-  .handler(async ({ data }) => {
-    const db = await getDb();
-    const key = data.licenseKey.trim().toUpperCase();
-    const license = await db.collection("licenses").findOne({ _id: key });
-    if (!license) throw new Error("License not found");
-    if (license.used) throw new Error("Cannot delete a license that is already used");
-
-    if (license.type === "platform") {
-      await requireSuperAdminSession();
-    } else if (license.type === "employee") {
-      const session = await requireSession();
-      if (session.role !== "owner") throw new Error("Only owner can delete employee licenses");
-      if (license.owner_id !== session.ownerId) throw new Error("Not your license");
-    } else {
-      throw new Error("Invalid license type");
-    }
-
-    await db.collection("licenses").deleteOne({ _id: key });
-    return { success: true };
-  });
+  await db.collection("licenses").deleteOne({ _id: key });
+  return { success: true };
+}

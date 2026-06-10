@@ -1,21 +1,28 @@
+"use client";
+
 import type { ReactNode } from "react";
-import { Navigate, useRouterState } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { canAccess, permissionForPath, resolvePermissions } from "@/lib/permissions";
 
 /** Redirects employees away from routes they lack permission for. */
 export function PermissionGuard({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const pathname = useRouterState({ select: r => r.location.pathname });
+  const pathname = usePathname() || "";
+  const router = useRouter();
 
-  if (!user) return <>{children}</>;
-
-  const perms = resolvePermissions(user.role, user.permissions);
+  const perms = user ? resolvePermissions(user.role, user.permissions) : null;
   const required = permissionForPath(pathname);
+  const allowed = !user || !required || canAccess(perms || {}, required);
 
-  if (required && !canAccess(perms, required)) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  useEffect(() => {
+    if (!allowed) {
+      router.replace("/dashboard");
+    }
+  }, [allowed, router]);
+
+  if (!allowed) return null;
 
   return <>{children}</>;
 }
