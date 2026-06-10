@@ -95,14 +95,16 @@ export default function PartiesPage() {
         </div>
       </Card>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-        <Input
-          className="pl-9"
-          placeholder={t("search_parties")}
-          value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1); }}
-        />
+      <div className="sticky top-0 z-10 bg-background border-b pb-2 pt-3">
+        <div className="relative pl-4 pr-4">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder={t("search_parties")}
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
+          />
+        </div>
       </div>
 
       {parties.data && parties.data.length === 0 && (
@@ -212,7 +214,7 @@ function AddPartyDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">{t("phone")}</Label>
-            <Input inputMode="tel" placeholder="01XXXXXXXXX" value={phone} onChange={e => setPhone(e.target.value)} />
+            <Input inputMode="tel" placeholder={t("phone")} value={phone} onChange={e => setPhone(e.target.value)} />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t("cancel")}</Button>
