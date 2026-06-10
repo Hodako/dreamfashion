@@ -219,29 +219,29 @@ export default function Dashboard() {
     .slice(0, 5)
     .map(([name, value]) => ({ name, value }));
 
-  // Chart data
-  const chartDays  = isMobile ? 7 : 14;
-  const dailyData  = groupByDay(allSales, chartDays);
+  // Chart data (desktop)
+  const chartDaysDesktop = isMobile ? 7 : 14;
+  const dailyDataDesktop = groupByDay(allSales, chartDaysDesktop);
 
-  // Payment breakdown for pie
-  const cashTotal   = allSales.filter(s => s.type === "cash").reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);
-  const creditTotal = allSales.filter(s => s.type === "credit").reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);
-  const onlineTotal = allSales.filter(s => s.type === "online").reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);
-  const pieData = [
-    { name: t("cash"),        value: cashTotal,   color: "#6366f1" },
-    { name: t("credit"),      value: creditTotal, color: "#f59e0b" },
-    { name: t("online_sell"), value: onlineTotal, color: "#10b981" },
+  // Payment breakdown for pie (desktop)
+  const cashTotalDesktop   = allSales.filter(s => s.type === "cash").reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);
+  const creditTotalDesktop = allSales.filter(s => s.type === "credit").reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);
+  const onlineTotalDesktop = allSales.filter(s => s.type === "online").reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);
+  const pieDataDesktop = [
+    { name: t("cash"),        value: cashTotalDesktop,   color: "#6366f1" },
+    { name: t("credit"),      value: creditTotalDesktop, color: "#f59e0b" },
+    { name: t("online_sell"), value: onlineTotalDesktop, color: "#10b981" },
   ].filter(d => d.value > 0);
 
-  // Recent sales
-  const recent = [...allSales].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 8);
+  // Recent sales (desktop)
+  const recentDesktop = [...allSales].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 8);
 
-  // Top products by revenue
-  const productRevMap: Record<string, number> = {};
+  // Top products by revenue (desktop)
+  const productRevMapDesktop: Record<string, number> = {};
   for (const s of allSales) {
-    productRevMap[s.product_name] = (productRevMap[s.product_name] ?? 0) + Number(s.sell_price) * s.qty;
+    productRevMapDesktop[s.product_name] = (productRevMapDesktop[s.product_name] ?? 0) + Number(s.sell_price) * s.qty;
   }
-  const topProducts = Object.entries(productRevMap)
+  const topProductsDesktop = Object.entries(productRevMapDesktop)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([name, value]) => ({ name, value }));
@@ -421,7 +421,7 @@ export default function Dashboard() {
             </div>
           </div>
           <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={dailyData}>
+            <AreaChart data={dailyDataDesktop}>
               <defs>
                 <linearGradient id="gCash" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25} />
@@ -450,20 +450,20 @@ export default function Dashboard() {
         {/* Pie: payment breakdown */}
         <Card className="p-5">
           <h2 className="text-sm font-semibold mb-4">{t("payment_method_breakdown")}</h2>
-          {pieData.length === 0 ? (
+          {pieDataDesktop.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">{t("no_activity")}</div>
           ) : (
             <>
               <ResponsiveContainer width="100%" height={180}>
                 <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={3}>
-                    {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                  <Pie data={pieDataDesktop} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={3}>
+                    {pieDataDesktop.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                   </Pie>
                   <Tooltip formatter={(v: any) => `৳${Number(v).toLocaleString()}`} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-2 mt-2">
-                {pieData.map(d => (
+                {pieDataDesktop.map(d => (
                   <div key={d.name} className="flex items-center justify-between text-xs">
                     <span className="flex items-center gap-1.5">
                       <span className="size-2.5 rounded-full" style={{ background: d.color }} />
@@ -483,11 +483,11 @@ export default function Dashboard() {
         {/* Top products bar chart */}
         <Card className="p-5">
           <h2 className="text-sm font-semibold mb-4">Top Products by Revenue</h2>
-          {topProducts.length === 0 ? (
+          {topProductsDesktop.length === 0 ? (
             <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">{t("no_activity")}</div>
           ) : (
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={topProducts} layout="vertical">
+              <BarChart data={topProductsDesktop} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={v => `৳${(v / 1000).toFixed(0)}k`} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} />
@@ -504,7 +504,7 @@ export default function Dashboard() {
             <h2 className="text-sm font-semibold">{t("recent_activity")}</h2>
             <Link href="/sales" className="text-xs text-primary hover:underline">{t("view")} all →</Link>
           </div>
-          {recent.length === 0 ? (
+          {recentDesktop.length === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground">{t("no_activity")}</div>
           ) : (
             <div className="overflow-hidden">
@@ -516,7 +516,7 @@ export default function Dashboard() {
                 <span className="text-right">Amount</span>
               </div>
               <div className="divide-y divide-border">
-                {recent.map(s => (
+                {recentDesktop.map(s => (
                   <div key={s.id} className="grid grid-cols-4 py-2.5 text-sm items-center">
                     <span className="font-medium truncate pr-2">{s.product_name}</span>
                     <span>
@@ -545,7 +545,7 @@ export default function Dashboard() {
       <Card className="p-5">
         <h2 className="text-sm font-semibold mb-4">{t("profit")} — {t("daily_sales_trend")} (14d)</h2>
         <ResponsiveContainer width="100%" height={160}>
-          <BarChart data={dailyData}>
+          <BarChart data={dailyDataDesktop}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis dataKey="date" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `৳${(v / 1000).toFixed(0)}k`} width={50} />
