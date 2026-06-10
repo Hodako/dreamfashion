@@ -118,8 +118,7 @@ const dict = {
   added_to: { bn: "কে যোগ করা হয়েছে", en: "added to" },
   money_owed: { bn: "পাওনা টাকা", en: "Money Owed" },
   add: { bn: "যোগ", en: "Add" },
-  apply: { bn: "योग्य? Actually we want Bangla: "Apply" maybe "Applied"? We'll put "Apply": { bn: "Apply", en: "Apply" }? Not good.
-Let's instead use "apply": { bn: " প্রয়োগ করুন", en: "Apply" },
+  apply: { bn: " প্রয়োগ করুন", en: "Apply" },
   clear: { bn: "সাফ করুন", en: "Clear" },
   // common
   language: { bn: "ভাষা", en: "Language" },
