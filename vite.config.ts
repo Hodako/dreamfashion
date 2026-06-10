@@ -6,7 +6,7 @@ export default defineConfig({
     server: { entry: "server" },
     nitro: {
       enabled: true,
-      preset: "vercel",
+      preset: process.env.VERCEL ? "vercel" : "node-server",
       externals: {
         external: ["mongodb"],
       },
