@@ -47,7 +47,7 @@ function kindLabel(t: (k: string) => string, kind: CashboxEntry["kind"]) {
   return t("take_money");
 }
 
-function CashboxDetailsPage() {
+export default function CashboxDetailsPage() {
   const { t } = useT();
   const cashbox = useCachedQuery(["cashbox"], getCashbox);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -329,6 +329,3 @@ function CashboxDialog({
     </Dialog>
   );
 }
-
-
-export default CashboxPage;
