@@ -1,6 +1,5 @@
 "use client";
 
-
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ChevronRight, UserPlus, Search, Users } from "lucide-react";
@@ -18,8 +17,7 @@ import { toast } from "sonner";
 import { createPartyFn } from "@/lib/rpc";
 import { setCachedData, refreshQueries } from "@/lib/optimistic-cache";
 import type { Party } from "@/lib/queries";
-
-
+import Link from "next/link";
 
 export default function PartiesPage() {
   const { t } = useT();
@@ -121,9 +119,9 @@ export default function PartiesPage() {
         {pagedParties.map(p => {
           const outstanding = partyOutstanding(p.id);
           return (
-            <Link key={p.id}
-              href="/parties/$id"
-              params={{ id: p.id }}
+            <Link
+              key={p.id}
+              href={`/parties/${p.id}`}
               onMouseEnter={() => prefetchParty(p)}
               onTouchStart={() => prefetchParty(p)}
               className="block w-full text-left active:scale-[0.99] transition-transform"

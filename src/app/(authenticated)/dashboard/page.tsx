@@ -223,7 +223,7 @@ export default function Dashboard() {
             { to: "/sales", icon: ShoppingBag, label: t("sales"), perm: "sales" as const },
             { to: "/parties", icon: Users, label: t("parties"), perm: "parties" as const },
           ].filter(item => canAccess(perms, item.perm)).map(({ to, icon: Icon, label }) => (
-            <Link key={to} to={to} className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-border bg-card hover:bg-accent transition-colors">
+            <Link key={to} href={to} className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-border bg-card hover:bg-accent transition-colors">
               <Icon className="size-5 text-primary" />
               <span className="text-xs font-medium text-center">{label}</span>
             </Link>
