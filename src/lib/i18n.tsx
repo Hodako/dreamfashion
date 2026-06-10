@@ -118,6 +118,9 @@ const dict = {
   added_to: { bn: "কে যোগ করা হয়েছে", en: "added to" },
   money_owed: { bn: "পাওনা টাকা", en: "Money Owed" },
   add: { bn: "যোগ", en: "Add" },
+  apply: { bn: "योग्य? Actually we want Bangla: "Apply" maybe "Applied"? We'll put "Apply": { bn: "Apply", en: "Apply" }? Not good.
+Let's instead use "apply": { bn: " প্রয়োগ করুন", en: "Apply" },
+  clear: { bn: "সাফ করুন", en: "Clear" },
   // common
   language: { bn: "ভাষা", en: "Language" },
   settings: { bn: "সেটিংস", en: "Settings" },
@@ -165,6 +168,7 @@ const dict = {
   all_records: { bn: "সকল রেকর্ড", en: "All records" },
   purchases: { bn: "ক্রয়", en: "Purchases" },
   returns: { bn: "ফেরত", en: "Returns" },
+  products_buy: { bn: "মাল ক্রয়", en: "Products Buy" },
 } as const;
 
 export type DictKey = keyof typeof dict;

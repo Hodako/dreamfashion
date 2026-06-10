@@ -16,7 +16,10 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/use-auth";
 import { canAccess, resolvePermissions } from "@/lib/permissions";
 import Link from "next/link";
-;
+import { useState, useEffect } from "react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -121,20 +124,100 @@ export default function Dashboard() {
   const allSales      = sales.data ?? [];
   const allExpenses   = expenses.data ?? [];
   const allWithdrawals = withdrawals.data ?? [];
+  const allCashbox    = cashbox.data ?? [];
+
+  const [dateFilter, setDateFilter] = useState<{ from: string; to: string }>({ from: '', to: '' });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('dashboardDateFilter');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setDateFilter(parsed);
+      }
+    } catch {}
+  }, []);
+
+  const applyFilter = (from: string, to: string) => {
+    setDateFilter({ from, to });
+    try {
+      localStorage.setItem('dashboardDateFilter', JSON.stringify({ from, to }));
+    } catch {}
+  };
+
+  const clearFilter = () => {
+    setDateFilter({ from: '', to: '' });
+    try {
+      localStorage.removeItem('dashboardDateFilter');
+    } catch {}
+  };
+
+  // Compute filtered data based on date filter (if any)
+  const filteredSales = allSales.filter(s => {
+    const d = new Date(s.created_at);
+    const fromOk = !dateFilter.from || d >= new Date(dateFilter.from);
+    const toOk = !dateFilter.to || d <= new Date(dateFilter.to);
+    return fromOk && toOk;
+  });
+  const filteredExpenses = allExpenses.filter(e => {
+    const d = new Date(e.created_at);
+    const fromOk = !dateFilter.from || d >= new Date(dateFilter.from);
+    const toOk = !dateFilter.to || d <= new Date(dateFilter.to);
+    return fromOk && toOk;
+  });
+  const filteredWithdrawals = allWithdrawals.filter(w => {
+    const d = new Date(w.created_at);
+    const fromOk = !dateFilter.from || d >= new Date(dateFilter.from);
+    const toOk = !dateFilter.to || d <= new Date(dateFilter.to);
+    return fromOk && toOk;
+  });
+  const filteredCashbox = allCashbox.filter(c => {
+    const d = new Date(c.created_at);
+    const fromOk = !dateFilter.from || d >= new Date(dateFilter.from);
+    const toOk = !dateFilter.to || d <= new Date(dateFilter.to);
+    return fromOk && toOk;
+  });
 
   const today   = todayStart();
   const week    = startOf(7);
   const month   = startOf(30);
 
-  // KPIs
-  const cashToday    = allSales.filter(s => new Date(s.created_at) >= today && s.type === "cash").reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);
-  const creditToday  = allSales.filter(s => new Date(s.created_at) >= today && s.type === "credit").reduce((a, s) => a + Number(s.due_amount), 0);
-  const onlineToday  = allSales.filter(s => new Date(s.created_at) >= today && s.type === "online").reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);
-  const profitWeek   = allSales.filter(s => new Date(s.created_at) >= week).reduce((a, s) => a + Number(s.profit), 0);
-  const profitMonth  = allSales.filter(s => new Date(s.created_at) >= month).reduce((a, s) => a + Number(s.profit), 0);
-  const totalDues    = allSales.reduce((a, s) => a + Number(s.due_amount), 0);
-  const expenseToday = allExpenses.filter(e => new Date(e.created_at) >= today).reduce((a, e) => a + Number(e.amount), 0);
-  const cashboxTotal = cashboxBalance(cashbox.data ?? []);
+  // KPIs (using filtered data)
+  const cashToday    = filteredSales.filter(s => new Date(s.created_at) >= today && s.type === "cash").reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);
+  const creditToday  = filteredSales.filter(s => new Date(s.created_at) >= today && s.type === "credit").reduce((a, s) => a + Number(s.due_amount), 0);
+  const onlineToday  = filteredSales.filter(s => new Date(s.created_at) >= today && s.type === "online").reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);
+  const profitWeek   = filteredSales.filter(s => new Date(s.created_at) >= week).reduce((a, s) => a + Number(s.profit), 0);
+  const profitMonth  = filteredSales.filter(s => new Date(s.created_at) >= month).reduce((a, s) => a + Number(s.profit), 0);
+  const totalDues    = filteredSales.reduce((a, s) => a + Number(s.due_amount), 0);
+  const expenseToday = filteredExpenses.filter(e => new Date(e.created_at) >= today).reduce((a, e) => a + Number(e.amount), 0);
+  const cashboxTotal = cashboxBalance(filteredCashbox);
+
+  // Chart data
+  const chartDays  = isMobile ? 7 : 14;
+  const dailyData  = groupByDay(filteredSales, chartDays);
+
+  // Payment breakdown for pie
+  const cashTotal   = filteredSales.filter(s => s.type === "cash").reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);
+  const creditTotal = filteredSales.filter(s => s.type === "credit").reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);
+  const onlineTotal = filteredSales.filter(s => s.type === "online").reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);
+  const pieData = [
+    { name: t("cash"),        value: cashTotal,   color: "#6366f1" },
+    { name: t("credit"),      value: creditTotal, color: "#f59e0b" },
+    { name: t("online_sell"), value: onlineTotal, color: "#10b981" },
+  ].filter(d => d.value > 0);
+
+  // Recent sales
+  const recent = [...filteredSales].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 8);
+
+  // Top products by revenue
+  const productRevMap: Record<string, number> = {};
+  for (const s of filteredSales) {
+    productRevMap[s.product_name] = (productRevMap[s.product_name] ?? 0) + Number(s.sell_price) * s.qty;
+  }
+  const topProducts = Object.entries(productRevMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, value]) => ({ name, value }));
 
   // Chart data
   const chartDays  = isMobile ? 7 : 14;
@@ -171,6 +254,29 @@ export default function Dashboard() {
           <h1 className="text-xl font-bold">{t("dashboard")}</h1>
           <p className="text-xs text-muted-foreground">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
         </div>
+
+        <Card className="p-4">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            <div className="mb-2 sm:mb-0">
+              <label className="text-xs text-muted-foreground block mb-1">Date from</label>
+              <Input type="date" value={dateFilter.from} onChange={e => applyFilter(e.target.value, dateFilter.to)} />
+            </div>
+            <div className="mb-2 sm:mb-0">
+              <label className="text-xs text-muted-foreground block mb-1">Date to</label>
+              <Input type="date" value={dateFilter.to} onChange={e => applyFilter(dateFilter.from, e.target.value)} />
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-end sm:gap-2">
+              <Button onClick={() => applyFilter(dateFilter.from, dateFilter.to)} variant="default" size="sm">
+                Apply
+              </Button>
+              <Button onClick={clearFilter} variant="outline" size="sm">
+                Clear
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {/* KPI 2-col grid */}
 
         {/* KPI 2-col grid */}
         <div className="grid grid-cols-2 gap-3">

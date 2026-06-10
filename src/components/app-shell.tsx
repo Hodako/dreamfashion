@@ -65,6 +65,7 @@ const desktopNavGroups: NavGroup[] = [
     labelKey: "reports",
     items: [
       { to: "/trackback", labelKey: "trackback", icon: BarChart3, perm: "reports" },
+      { to: "/purchase-reports", labelKey: "products_buy", icon: ShoppingCart, perm: "reports" },
       { to: "/settings", labelKey: "settings", icon: Settings, perm: "settings" },
     ],
   },
