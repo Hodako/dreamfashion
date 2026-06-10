@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,7 +25,7 @@ export function ProductSearchSelect({ products, value, onChange, showPrice, plac
   const selected = products.find(p => p.id === value);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal={false}>
       <PopoverTrigger asChild>
         <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-9">
           {selected

@@ -1,3 +1,5 @@
+"use client";
+
 import { useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useCachedQuery } from "@/hooks/use-cached-query";
