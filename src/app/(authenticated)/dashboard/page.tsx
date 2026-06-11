@@ -153,6 +153,12 @@ export default function Dashboard() {
     } catch {}
   };
 
+  const today   = todayStart();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  const week    = startOf(7);
+  const month   = startOf(30);
+
   // Compute filtered data based on date filter (if any)
   const filteredSales = allSales.filter(s => {
     const d = new Date(s.created_at);
@@ -199,11 +205,6 @@ export default function Dashboard() {
     return fromOk && toOk;
   });
 
-  const today   = todayStart();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(today.getDate() + 1);
-  const week    = startOf(7);
-  const month   = startOf(30);
 
   // KPIs (using filtered data)
   const cashToday    = filteredSales.filter(s => new Date(s.created_at) >= today && s.type === "cash").reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);
