@@ -12,6 +12,7 @@ export interface AuthProfileCache {
   business_id: string | null;
   business_name: string;
   logo_url: string;
+  avatar_url?: string;
   updatedAt: number;
 }
 

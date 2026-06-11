@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { getMeFn, logoutFn } from "@/lib/rpc";
+import { getMeFn, logoutFn, updateUserAvatarFn } from "@/lib/rpc";
 import type { PermissionSet } from "@/lib/permissions";
 import { clearAuthProfile, readAuthProfile, writeAuthProfile, writeBrand } from "@/lib/local-cache";
+import { toast } from "sonner";
+import { useT } from "@/lib/i18n";
 
 export type AuthUser = {
   id: string;
@@ -12,23 +14,30 @@ export type AuthUser = {
   business_id: string | null;
   business_name: string;
   logo_url: string;
+  avatar_url?: string;
   permissions?: PermissionSet;
 };
 
 type AuthCtx = {
   user: AuthUser | null;
   loading: boolean;
+  isUploading: boolean;
+  uploadProgress: number;
   login: (user: AuthUser) => void;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+  uploadProfilePic: (file: File) => Promise<void>;
 };
 
 const Ctx = createContext<AuthCtx>({
   user: null,
   loading: true,
+  isUploading: false,
+  uploadProgress: 0,
   login: () => {},
   logout: async () => {},
   refresh: async () => {},
+  uploadProfilePic: async () => {},
 });
 
 function cacheUser(u: AuthUser | null) {
@@ -45,6 +54,7 @@ function cacheUser(u: AuthUser | null) {
     business_id: u.business_id,
     business_name: u.business_name,
     logo_url: u.logo_url,
+    avatar_url: u.avatar_url,
   });
 }
 
@@ -59,6 +69,7 @@ function profileToUser(p: ReturnType<typeof readAuthProfile>): AuthUser | null {
     business_id: p.business_id,
     business_name: p.business_name,
     logo_url: p.logo_url,
+    avatar_url: p.avatar_url,
   };
 }
 
@@ -66,6 +77,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const cached = typeof window !== "undefined" ? readAuthProfile() : null;
   const [user, setUser] = useState<AuthUser | null>(() => profileToUser(cached));
   const [loading, setLoading] = useState(!cached);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const { lang } = useT();
 
   async function checkUser() {
     try {
@@ -98,8 +112,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   };
 
+  const uploadProfilePic = async (file: File) => {
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const xhr = new XMLHttpRequest();
+      
+      const uploadPromise = new Promise<{ url: string }>((resolve, reject) => {
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            setUploadProgress(percent);
+          }
+        });
+
+        xhr.addEventListener("load", () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const res = JSON.parse(xhr.responseText);
+              if (res.error) {
+                reject(new Error(res.error));
+              } else {
+                resolve(res);
+              }
+            } catch {
+              reject(new Error("Failed to parse response"));
+            }
+          } else {
+            reject(new Error(`Upload failed with status: ${xhr.status}`));
+          }
+        });
+
+        xhr.addEventListener("error", () => {
+          reject(new Error("Network error during upload"));
+        });
+
+        xhr.open("POST", "/api/upload");
+        xhr.send(formData);
+      });
+
+      const result = await uploadPromise;
+      
+      const updateRes = await updateUserAvatarFn({ data: { avatar_url: result.url } });
+      if (updateRes.user) {
+        login(updateRes.user as AuthUser);
+      }
+      toast.success(lang === "bn" ? "প্রোফাইল ছবি সফলভাবে আপডেট করা হয়েছে" : "Profile picture updated successfully");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Upload failed");
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+    }
+  };
+
   return (
-    <Ctx.Provider value={{ user, loading, login, logout, refresh: checkUser }}>
+    <Ctx.Provider value={{ user, loading, isUploading, uploadProgress, login, logout, refresh: checkUser, uploadProfilePic }}>
       {children}
     </Ctx.Provider>
   );

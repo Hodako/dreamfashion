@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import Link from "next/link";
 import {
   ShoppingCart, Receipt, PiggyBank, DollarSign,
@@ -29,8 +30,21 @@ const financeLinks = [
 
 export default function MorePage() {
   const { lang, t } = useT();
-  const { user, logout } = useAuth();
+  const { user, logout, isUploading, uploadProgress, uploadProfilePic } = useAuth();
   const perms = resolvePermissions(user?.role ?? "employee", user?.permissions);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarClick = () => {
+    if (isUploading) return;
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await uploadProfilePic(file);
+    }
+  };
 
   const visibleBiz = businessLinks.filter(item => canAccess(perms, item.perm));
   const visibleFin = financeLinks.filter(item => canAccess(perms, item.perm));
@@ -44,10 +58,39 @@ export default function MorePage() {
       {/* Redesigned Profile Header */}
       <Card className="p-4 bg-gradient-to-br from-primary/10 via-indigo-500/5 to-background border-primary/20 beveled-card">
         <div className="flex items-center gap-4">
-          <Avatar className="size-14 border-2 border-background shadow-md shrink-0">
-            <AvatarImage src="https://png.pngtree.com/png-vector/20231019/ourmid/pngtree-user-profile-avatar-png-image_10211467.png" alt="Profile" />
-            <AvatarFallback className="bg-gradient-to-br from-primary to-indigo-600 text-white font-bold text-lg">{initials}</AvatarFallback>
-          </Avatar>
+          <div className="relative shrink-0 select-none">
+            <Avatar
+              onClick={handleAvatarClick}
+              className={`size-14 border-2 border-background shadow-md shrink-0 cursor-pointer transition-transform active:scale-95 group hover:brightness-90 ${isUploading ? 'pointer-events-none' : ''}`}
+            >
+              <AvatarImage src={user?.avatar_url || "https://png.pngtree.com/png-vector/20231019/ourmid/pngtree-user-profile-avatar-png-image_10211467.png"} alt="Profile" />
+              <AvatarFallback className="bg-gradient-to-br from-primary to-indigo-600 text-white font-bold text-lg">{initials}</AvatarFallback>
+            </Avatar>
+
+            {isUploading ? (
+              <div className="absolute inset-0 bg-black/60 rounded-full flex flex-col items-center justify-center text-[9px] text-white font-bold pointer-events-none">
+                <span>{uploadProgress}%</span>
+                <div className="w-8 h-1 bg-white/30 rounded-full mt-1 overflow-hidden">
+                  <div className="h-full bg-emerald-400" style={{ width: `${uploadProgress}%` }} />
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={handleAvatarClick}
+                className="absolute inset-0 bg-black/35 opacity-0 hover:opacity-100 rounded-full flex items-center justify-center text-[8px] text-white font-medium cursor-pointer transition-opacity pointer-events-none"
+              >
+                {lang === "bn" ? "আপলোড" : "Upload"}
+              </div>
+            )}
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/*"
+              className="hidden"
+            />
+          </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-bold text-base text-zinc-950 dark:text-zinc-50 truncate">{user?.full_name || "User"}</h2>

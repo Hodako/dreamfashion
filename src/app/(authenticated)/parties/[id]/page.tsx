@@ -105,7 +105,10 @@ export default function PartyDetail() {
         setCachedData<Sale[]>(qc, ["party-detail", "sales", id], old =>
           (old ?? []).filter(s => s.id !== entry.rawId),
         );
-        await deleteSaleFn({ data: { id: entry.rawId } });
+        const res = await deleteSaleFn({ data: { id: entry.rawId } });
+        if (res && !res.success && 'error' in res) {
+          throw new Error(res.error as string);
+        }
       } else if (entry.kind === "receivable") {
         setCachedData<PartyLedger[]>(qc, ["party-receivables", id], old =>
           (old ?? []).filter(r => r.id !== entry.rawId),

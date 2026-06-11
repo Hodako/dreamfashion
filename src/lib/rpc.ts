@@ -49,6 +49,7 @@ async function mapUser(db: Awaited<ReturnType<typeof getDb>>, userId: string) {
     business_id: (user.business_id as string) || null,
     business_name: (business?.name as string) || "HakimEzy",
     logo_url: (business?.logo_url as string) || "/logo.png",
+    avatar_url: (user.avatar_url as string) || "",
     permissions: (user.role === "owner" ? OWNER_PERMISSIONS : (user.permissions as PermissionSet)) || DEFAULT_EMPLOYEE_PERMISSIONS,
   };
 }
@@ -329,23 +330,40 @@ export async function createSaleFn(input: { data: { product_id?: string | null; 
 }
 
 export async function deleteSaleFn(input: { data: { id: string } }) {
+  try {
+    const { data } = input;
+    const session = await requireSession();
+    const db = await getDb();
+    const sale = await db.collection("sales").findOne({ _id: data.id, owner_id: session.ownerId });
+    if (!sale) throw new Error("Sale not found");
+    if (sale.returned) throw new Error("Already returned");
+
+    if (sale.product_id) {
+      await db.collection("products").updateOne(
+        { _id: sale.product_id, owner_id: session.ownerId },
+        { $inc: { stock: Number(sale.qty) || 0 } }
+      );
+    }
+
+    await db.collection("cashbox_entries").deleteMany({ owner_id: session.ownerId, ref_id: data.id });
+    await db.collection("sales").deleteOne({ _id: data.id, owner_id: session.ownerId });
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in deleteSaleFn:", err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+export async function updateUserAvatarFn(input: { data: { avatar_url: string } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  const sale = await db.collection("sales").findOne({ _id: data.id, owner_id: session.ownerId });
-  if (!sale) throw new Error("Sale not found");
-  if (sale.returned) throw new Error("Already returned");
-
-  if (sale.product_id) {
-    await db.collection("products").updateOne(
-      { _id: sale.product_id, owner_id: session.ownerId },
-      { $inc: { stock: Number(sale.qty) || 0 } }
-    );
-  }
-
-  await db.collection("cashbox_entries").deleteMany({ owner_id: session.ownerId, ref_id: data.id });
-  await db.collection("sales").deleteOne({ _id: data.id, owner_id: session.ownerId });
-  return { success: true };
+  await db.collection("users").updateOne(
+    { _id: session.userId },
+    { $set: { avatar_url: data.avatar_url } }
+  );
+  const user = await mapUser(db, session.userId);
+  return { user };
 }
 
 export async function createReturnFn(input: { data: { sale_id: string; qty: number; note?: string | null } }) {

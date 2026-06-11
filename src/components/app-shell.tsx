@@ -93,7 +93,7 @@ function filterGroups(groups: NavGroup[], perms: PermissionSet): NavGroup[] {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { t, lang, setLang } = useT();
   const { resolved, toggle } = useTheme();
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout, isUploading, uploadProgress } = useAuth();
   const router = useRouter();
   const pathname = usePathname() || "";
   const isMobile = useIsMobile();
@@ -218,7 +218,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <DropdownMenuTrigger asChild>
                     <SidebarMenuButton size="lg" tooltip={user.email ?? "Account"}>
                       <Avatar className="size-6 shrink-0">
-                        <AvatarImage src="https://png.pngtree.com/png-vector/20231019/ourmid/pngtree-user-profile-avatar-png-image_10211467.png" alt="Profile" />
+                        <AvatarImage src={user?.avatar_url || "https://png.pngtree.com/png-vector/20231019/ourmid/pngtree-user-profile-avatar-png-image_10211467.png"} alt="Profile" />
                         <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">{userInitials}</AvatarFallback>
                       </Avatar>
                       <span className="truncate text-sm">{user.email}</span>
@@ -244,6 +244,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <header className="sticky top-0 z-30 bg-card/85 backdrop-blur-lg border-b border-border/50 shrink-0">
+          {isUploading && (
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-zinc-200 dark:bg-zinc-800 z-50">
+              <div
+                className="h-full bg-gradient-to-r from-primary to-indigo-600 transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          )}
           <div className="flex items-center h-12 px-3 gap-2">
             <div className="flex items-center gap-2 min-w-0 flex-1">
               {isMobile ? (
@@ -284,7 +292,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="size-8">
                     <Avatar className="size-5">
-                      <AvatarImage src="https://png.pngtree.com/png-vector/20231019/ourmid/pngtree-user-profile-avatar-png-image_10211467.png" alt="Profile" />
+                      <AvatarImage src={user?.avatar_url || "https://png.pngtree.com/png-vector/20231019/ourmid/pngtree-user-profile-avatar-png-image_10211467.png"} alt="Profile" />
                       <AvatarFallback className="text-[9px] bg-primary text-primary-foreground">{userInitials}</AvatarFallback>
                     </Avatar>
                   </Button>

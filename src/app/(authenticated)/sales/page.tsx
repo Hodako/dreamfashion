@@ -119,7 +119,10 @@ function SalesTab({
   async function handleDelete(id: string) {
     if (!confirm(t("delete") + "?")) return;
     try {
-      await deleteSaleFn({ data: { id } });
+      const res = await deleteSaleFn({ data: { id } });
+      if (res && !res.success && 'error' in res) {
+        throw new Error(res.error as string);
+      }
       toast.success(t("delete") || "Deleted successfully");
       qc.invalidateQueries({ queryKey: ["sales"] });
       qc.invalidateQueries({ queryKey: ["products"] });

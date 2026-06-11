@@ -202,6 +202,15 @@ export default function Dashboard() {
     pie: false,
   });
 
+  const handleProfitClick = () => {
+    setChartMetric("profit");
+    setCollapsed(prev => ({ ...prev, graphs: false }));
+    setTimeout(() => {
+      const el = document.getElementById("analytics-chart-mobile") || document.getElementById("analytics-chart-desktop");
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+  };
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem('dashboardDateFilter');
@@ -647,6 +656,7 @@ export default function Dashboard() {
                   sub={t("today")}
                   imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
                   color="bg-emerald-500"
+                  onClick={handleProfitClick}
                 />
                 <KPICard
                   label={t("cash_sale")}
@@ -693,7 +703,9 @@ export default function Dashboard() {
                   />
                 )}
                 {canAccess(perms, "parties") && (
-                  <KPICard label={t("due")} value={fmtMoney(totalDues)} imageUrl="https://img.icons8.com/color/48/loan.png" color="bg-amber-600" trendUp={false} />
+                  <Link href="/parties" className="block">
+                    <KPICard label={t("due")} value={fmtMoney(totalDues)} imageUrl="https://img.icons8.com/color/48/loan.png" color="bg-amber-600" trendUp={false} />
+                  </Link>
                 )}
               </div>
             </div>
@@ -722,7 +734,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Collapsible Custom Graph Panel */}
-        <Card className="p-3 space-y-3">
+        <Card id="analytics-chart-mobile" className="p-3 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("custom_graphs")}</span>
             <Button variant="ghost" size="icon" className="size-7" onClick={() => setCollapsed(prev => ({ ...prev, graphs: !prev.graphs }))}>
@@ -990,6 +1002,7 @@ export default function Dashboard() {
           imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
           color="bg-emerald-500"
           trendUp
+          onClick={handleProfitClick}
         />
         {canAccess(perms, "expenses") ? (
           <Link href="/cash-management/cashbox" className="block">
@@ -1034,7 +1047,9 @@ export default function Dashboard() {
           }}
         />
         {canAccess(perms, "parties") && (
-          <KPICard label={t("due")} value={fmtMoney(totalDues)} imageUrl="https://img.icons8.com/color/48/loan.png" color="bg-amber-500" trendUp={false} trend="Outstanding" />
+          <Link href="/parties" className="block">
+            <KPICard label={t("due")} value={fmtMoney(totalDues)} imageUrl="https://img.icons8.com/color/48/loan.png" color="bg-amber-500" trendUp={false} trend="Outstanding" />
+          </Link>
         )}
       </div>
 
@@ -1062,7 +1077,7 @@ export default function Dashboard() {
       {/* Row 3: Custom Graph + Pie */}
       <div className="grid grid-cols-3 gap-4">
         {/* Custom interactive graph */}
-        <Card className="col-span-2 p-5 space-y-4">
+        <Card id="analytics-chart-desktop" className="col-span-2 p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold">{t("custom_graphs")}</h2>
             
