@@ -1,3 +1,9 @@
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -11,6 +17,7 @@ const nextConfig = {
     // Ignore TypeScript build errors temporarily during initial migration steps
     ignoreBuildErrors: true,
   },
+  outputFileTracingRoot: __dirname,
 };
 
 export default nextConfig;

@@ -335,7 +335,15 @@ export async function deleteSaleFn(input: { data: { id: string } }) {
   const sale = await db.collection("sales").findOne({ _id: data.id, owner_id: session.ownerId });
   if (!sale) throw new Error("Sale not found");
   if (sale.returned) throw new Error("Already returned");
-  await db.collection("cashbox_entries").deleteOne({ owner_id: session.ownerId, ref_id: data.id, kind: "sale" });
+
+  if (sale.product_id) {
+    await db.collection("products").updateOne(
+      { _id: sale.product_id, owner_id: session.ownerId },
+      { $inc: { stock: Number(sale.qty) || 0 } }
+    );
+  }
+
+  await db.collection("cashbox_entries").deleteMany({ owner_id: session.ownerId, ref_id: data.id });
   await db.collection("sales").deleteOne({ _id: data.id, owner_id: session.ownerId });
   return { success: true };
 }

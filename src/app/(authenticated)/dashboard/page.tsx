@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { createReminderFn, toggleReminderFn, deleteReminderFn } from "@/lib/rpc";
+import { SaleDialog } from "@/components/sale-dialog";
 
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -85,18 +86,32 @@ function groupAllDataByDay(sales: any[], expenses: any[], days: number) {
 
 // ── stat card ─────────────────────────────────────────────────────────────
 function KPICard({
-  label, value, sub, icon: Icon, trend, trendUp, color,
+  label, value, sub, icon: Icon, imageUrl, trend, trendUp, color, onClick,
 }: {
   label: string; value: string; sub?: string;
-  icon: React.ElementType; trend?: string; trendUp?: boolean; color: string;
+  icon?: React.ElementType; imageUrl?: string; trend?: string; trendUp?: boolean; color: string;
+  onClick?: () => void;
 }) {
   return (
-    <Card className="p-4 flex flex-col gap-2 hover:shadow-md transition-shadow">
+    <Card
+      onClick={onClick}
+      className={`p-4 flex flex-col gap-2 hover:shadow-md transition-all ${
+        onClick
+          ? "cursor-pointer hover:border-primary/45 active:scale-[0.97] active:bg-accent/40 shadow-sm hover:shadow-md active:shadow-inner"
+          : ""
+      }`}
+    >
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <div className={`size-8 rounded-lg ${color} flex items-center justify-center`}>
-          <Icon className="size-4 text-white" />
-        </div>
+        {imageUrl ? (
+          <div className="size-8 flex items-center justify-center shrink-0">
+            <img src={imageUrl} className="size-8 object-contain" alt={label} />
+          </div>
+        ) : Icon ? (
+          <div className={`size-8 rounded-lg ${color} flex items-center justify-center shrink-0`}>
+            <Icon className="size-4 text-white" />
+          </div>
+        ) : null}
       </div>
       <div>
         <div className="text-xl font-bold tracking-tight">{value}</div>
@@ -170,6 +185,13 @@ export default function Dashboard() {
   const [selectedPartyId, setSelectedPartyId] = useState("");
   const [duesThreshold, setDuesThreshold] = useState("1000");
   const [showPopup, setShowPopup] = useState(false);
+
+  // Quick Sell Dialog state
+  const [saleOpen, setSaleOpen] = useState(false);
+  const [salePresetType, setSalePresetType] = useState<"cash" | "credit" | "online">("cash");
+
+  // Recent Activity Limit state
+  const [activityLimit, setActivityLimit] = useState(5);
 
   // Collapsible sections on mobile
   const [collapsed, setCollapsed] = useState({
@@ -287,8 +309,16 @@ export default function Dashboard() {
     { name: t("online_sell"), value: onlineTotal, color: "#10b981" },
   ].filter(d => d.value > 0);
 
-  // Recent sales
-  const recentSales = [...filteredSales].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 8);
+  // Recent sales sorted
+  const sortedRecentSales = useMemo(() => {
+    return [...filteredSales]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [filteredSales]);
+
+  // Paginated / limited list for recent sales
+  const recentSalesToShow = useMemo(() => {
+    return sortedRecentSales.slice(0, activityLimit);
+  }, [sortedRecentSales, activityLimit]);
 
   // Due alerts calculation
   const dueAlertParties = allParties.map(p => {
@@ -611,9 +641,35 @@ export default function Dashboard() {
           {!collapsed.kpis && (
             <div className="space-y-2.5">
               <div className="grid grid-cols-2 gap-2">
-                <KPICard label={t("profit")} value={fmtMoney(profitToday)} sub={t("today")} icon={TrendingUp} color="bg-emerald-500" />
-                <KPICard label={t("cash_sale")} value={fmtMoney(cashToday)} sub={t("today")} icon={Wallet} color="bg-indigo-500" />
-                <KPICard label={t("credit_sale")} value={fmtMoney(creditToday)} sub={t("today")} icon={AlertCircle} color="bg-amber-500" />
+                <KPICard
+                  label={t("profit")}
+                  value={fmtMoney(profitToday)}
+                  sub={t("today")}
+                  imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
+                  color="bg-emerald-500"
+                />
+                <KPICard
+                  label={t("cash_sale")}
+                  value={fmtMoney(cashToday)}
+                  sub={t("today")}
+                  imageUrl="https://img.icons8.com/fluency/48/sell.png"
+                  color="bg-indigo-500"
+                  onClick={() => {
+                    setSalePresetType("cash");
+                    setSaleOpen(true);
+                  }}
+                />
+                <KPICard
+                  label={t("credit_sale")}
+                  value={fmtMoney(creditToday)}
+                  sub={t("today")}
+                  imageUrl="https://img.icons8.com/fluency/48/sell.png"
+                  color="bg-amber-500"
+                  onClick={() => {
+                    setSalePresetType("credit");
+                    setSaleOpen(true);
+                  }}
+                />
                 {canAccess(perms, "expenses") && (
                   <KPICard label={t("expense")} value={fmtMoney(expenseToday)} sub={t("today")} icon={Receipt} color="bg-rose-500" />
                 )}
@@ -621,13 +677,23 @@ export default function Dashboard() {
               <div className="grid grid-cols-2 gap-2 border-t border-border/50 pt-2.5">
                 {canAccess(perms, "expenses") ? (
                   <Link href="/cash-management/cashbox" className="block">
-                    <KPICard label={t("cashbox")} value={fmtMoney(cashboxTotal)} icon={Banknote} color="bg-indigo-600" trendUp={cashboxTotal >= 0} trend={t("balance")} />
+                    <KPICard label={t("cashbox")} value={fmtMoney(cashboxTotal)} imageUrl="https://img.icons8.com/plasticine/100/cash--v1.png" color="bg-indigo-600" trendUp={cashboxTotal >= 0} trend={t("balance")} />
                   </Link>
                 ) : (
-                  <KPICard label={t("cash_sale")} value={fmtMoney(cashToday)} sub={t("today")} icon={Wallet} color="bg-indigo-600" />
+                  <KPICard
+                    label={t("cash_sale")}
+                    value={fmtMoney(cashToday)}
+                    sub={t("today")}
+                    imageUrl="https://img.icons8.com/fluency/48/sell.png"
+                    color="bg-indigo-600"
+                    onClick={() => {
+                      setSalePresetType("cash");
+                      setSaleOpen(true);
+                    }}
+                  />
                 )}
                 {canAccess(perms, "parties") && (
-                  <KPICard label={t("due")} value={fmtMoney(totalDues)} icon={AlertCircle} color="bg-amber-600" trendUp={false} />
+                  <KPICard label={t("due")} value={fmtMoney(totalDues)} imageUrl="https://img.icons8.com/color/48/loan.png" color="bg-amber-600" trendUp={false} />
                 )}
               </div>
             </div>
@@ -638,13 +704,19 @@ export default function Dashboard() {
         <Card className="p-3 border border-border space-y-2">
           <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{lang === "bn" ? "পণ্য স্টক মূল্য (ইনভেন্টরি)" : "Stock & Inventory Valuation"}</div>
           <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="p-2 bg-secondary/50 rounded-lg">
-              <div className="text-[9px] text-muted-foreground">{t("inventory_val_cost")}</div>
-              <div className="font-bold text-sm mt-0.5">{fmtMoney(totalStockCostValuation)}</div>
+            <div className="p-2 bg-secondary/50 rounded-lg flex items-center justify-between gap-1.5">
+              <div className="min-w-0">
+                <div className="text-[9px] text-muted-foreground">{t("inventory_val_cost")}</div>
+                <div className="font-bold text-sm mt-0.5">{fmtMoney(totalStockCostValuation)}</div>
+              </div>
+              <img src="https://img.icons8.com/bubbles/100/buy.png" className="size-8 object-contain shrink-0" alt="buy" />
             </div>
-            <div className="p-2 bg-secondary/50 rounded-lg">
-              <div className="text-[9px] text-muted-foreground">{t("inventory_val_sale")}</div>
-              <div className="font-bold text-sm mt-0.5">{fmtMoney(totalStockSaleValuation)}</div>
+            <div className="p-2 bg-secondary/50 rounded-lg flex items-center justify-between gap-1.5">
+              <div className="min-w-0">
+                <div className="text-[9px] text-muted-foreground">{t("inventory_val_sale")}</div>
+                <div className="font-bold text-sm mt-0.5">{fmtMoney(totalStockSaleValuation)}</div>
+              </div>
+              <Package className="size-5 text-muted-foreground shrink-0" />
             </div>
           </div>
         </Card>
@@ -789,21 +861,33 @@ export default function Dashboard() {
             </Button>
           </div>
           {!collapsed.recent && (
-            <Card className="divide-y divide-border overflow-hidden">
-              {recentSales.length === 0 && <div className="p-4 text-center text-xs text-muted-foreground">{t("no_activity")}</div>}
-              {recentSales.map(s => (
-                <div key={s.id} className="p-2.5 flex items-center justify-between gap-3 text-xs">
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{s.product_name}</div>
-                    <div className="text-[10px] text-muted-foreground">{s.type === "cash" ? t("cash") : s.type === "online" ? t("online_sell") : t("credit")} · {fmtDateTime(s.created_at)}</div>
+            <div className="space-y-2">
+              <Card className="divide-y divide-border overflow-hidden">
+                {recentSalesToShow.length === 0 && <div className="p-4 text-center text-xs text-muted-foreground">{t("no_activity")}</div>}
+                {recentSalesToShow.map(s => (
+                  <div key={s.id} className="p-2.5 flex items-center justify-between gap-3 text-xs">
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{s.product_name}</div>
+                      <div className="text-[10px] text-muted-foreground">{s.type === "cash" ? t("cash") : s.type === "online" ? t("online_sell") : t("credit")} · {fmtDateTime(s.created_at)}</div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-semibold">{fmtMoney(Number(s.sell_price) * s.qty)}</div>
+                      <div className="text-[10px] text-emerald-600">+{fmtMoney(s.profit)}</div>
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <div className="font-semibold">{fmtMoney(Number(s.sell_price) * s.qty)}</div>
-                    <div className="text-[10px] text-emerald-600">+{fmtMoney(s.profit)}</div>
-                  </div>
-                </div>
-              ))}
-            </Card>
+                ))}
+              </Card>
+              {sortedRecentSales.length > recentSalesToShow.length && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-xs h-8 hover:bg-accent border border-dashed border-border/60"
+                  onClick={() => setActivityLimit(prev => prev + 5)}
+                >
+                  {lang === "bn" ? "আরও লোড করুন ↓" : "Load More ↓"}
+                </Button>
+              )}
+            </div>
           )}
         </div>
 
@@ -868,6 +952,12 @@ export default function Dashboard() {
             </DialogContent>
           </Dialog>
         )}
+
+        <SaleDialog
+          open={saleOpen}
+          onOpenChange={setSaleOpen}
+          presetType={salePresetType}
+        />
       </div>
     );
   }
@@ -893,28 +983,79 @@ export default function Dashboard() {
 
       {/* Row 1: KPI Cards */}
       <div className="grid grid-cols-5 gap-4">
-        <KPICard label={t("profit")} value={fmtMoney(profitToday)} sub={t("today")} icon={TrendingUp} color="bg-emerald-500" trendUp />
+        <KPICard
+          label={t("profit")}
+          value={fmtMoney(profitToday)}
+          sub={t("today")}
+          imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
+          color="bg-emerald-500"
+          trendUp
+        />
         {canAccess(perms, "expenses") ? (
           <Link href="/cash-management/cashbox" className="block">
-            <KPICard label={t("cashbox")} value={fmtMoney(cashboxTotal)} icon={Banknote} color="bg-indigo-500" trendUp={cashboxTotal >= 0} trend={t("balance")} />
+            <KPICard label={t("cashbox")} value={fmtMoney(cashboxTotal)} imageUrl="https://img.icons8.com/plasticine/100/cash--v1.png" color="bg-indigo-500" trendUp={cashboxTotal >= 0} trend={t("balance")} />
           </Link>
         ) : (
-          <KPICard label={t("cash_sale")} value={fmtMoney(cashToday)} sub={t("today")} icon={Wallet} color="bg-indigo-500" trendUp />
+          <KPICard
+            label={t("cash_sale")}
+            value={fmtMoney(cashToday)}
+            sub={t("today")}
+            imageUrl="https://img.icons8.com/fluency/48/sell.png"
+            color="bg-indigo-500"
+            trendUp
+            onClick={() => {
+              setSalePresetType("cash");
+              setSaleOpen(true);
+            }}
+          />
         )}
-        <KPICard label={t("cash_sale")} value={fmtMoney(cashToday)} sub={t("today")} icon={DollarSign} color="bg-indigo-600" trendUp />
-        <KPICard label={t("online_sell")} value={fmtMoney(onlineToday)} sub={t("today")} icon={TrendingUp} color="bg-sky-500" trendUp />
+        <KPICard
+          label={t("cash_sale")}
+          value={fmtMoney(cashToday)}
+          sub={t("today")}
+          imageUrl="https://img.icons8.com/fluency/48/sell.png"
+          color="bg-indigo-600"
+          trendUp
+          onClick={() => {
+            setSalePresetType("cash");
+            setSaleOpen(true);
+          }}
+        />
+        <KPICard
+          label={t("online_sell")}
+          value={fmtMoney(onlineToday)}
+          sub={t("today")}
+          imageUrl="https://img.icons8.com/fluency/48/sell.png"
+          color="bg-sky-500"
+          trendUp
+          onClick={() => {
+            setSalePresetType("online");
+            setSaleOpen(true);
+          }}
+        />
         {canAccess(perms, "parties") && (
-          <KPICard label={t("due")} value={fmtMoney(totalDues)} icon={AlertCircle} color="bg-amber-500" trendUp={false} trend="Outstanding" />
+          <KPICard label={t("due")} value={fmtMoney(totalDues)} imageUrl="https://img.icons8.com/color/48/loan.png" color="bg-amber-500" trendUp={false} trend="Outstanding" />
         )}
       </div>
 
       {/* Row 2: Secondary KPIs / Valuation */}
       <div className="grid grid-cols-4 gap-4">
-        <KPICard label={t("credit_sale")} value={fmtMoney(creditToday)} sub={t("today")} icon={Receipt} color="bg-rose-500" trendUp={false} />
+        <KPICard
+          label={t("credit_sale")}
+          value={fmtMoney(creditToday)}
+          sub={t("today")}
+          imageUrl="https://img.icons8.com/fluency/48/sell.png"
+          color="bg-rose-500"
+          trendUp={false}
+          onClick={() => {
+            setSalePresetType("credit");
+            setSaleOpen(true);
+          }}
+        />
         {canAccess(perms, "expenses") && (
           <KPICard label={t("expense")} value={fmtMoney(expenseToday)} sub={t("today")} icon={Receipt} color="bg-orange-500" trendUp={false} />
         )}
-        <KPICard label={t("inventory_val_cost")} value={fmtMoney(totalStockCostValuation)} sub={lang === "bn" ? "কেনা মূল্যের হিসাব" : "Cost Worth of Stock"} icon={Package} color="bg-teal-500" />
+        <KPICard label={t("inventory_val_cost")} value={fmtMoney(totalStockCostValuation)} sub={lang === "bn" ? "কেনা মূল্যের হিসাব" : "Cost Worth of Stock"} imageUrl="https://img.icons8.com/bubbles/100/buy.png" color="bg-teal-500" />
         <KPICard label={t("inventory_val_sale")} value={fmtMoney(totalStockSaleValuation)} sub={lang === "bn" ? "বিক্রি মূল্যের হিসাব" : "Selling Worth of Stock"} icon={Package} color="bg-pink-500" />
       </div>
 
@@ -1074,22 +1215,34 @@ export default function Dashboard() {
               <h2 className="text-sm font-semibold">{t("recent_activity")}</h2>
               <Link href="/sales" className="text-xs text-primary hover:underline">{t("view")} all →</Link>
             </div>
-            {recentSales.length === 0 ? (
+            {recentSalesToShow.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">{t("no_activity")}</div>
             ) : (
-              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                {recentSales.map(s => (
-                  <div key={s.id} className="flex justify-between items-center py-1.5 border-b last:border-b-0 text-xs">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-semibold truncate">{s.product_name} <span className="text-muted-foreground">×{s.qty}</span></div>
-                      <div className="text-[10px] text-muted-foreground">{fmtDateTime(s.created_at)}</div>
+              <div className="space-y-3">
+                <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                  {recentSalesToShow.map(s => (
+                    <div key={s.id} className="flex justify-between items-center py-1.5 border-b last:border-b-0 text-xs">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold truncate">{s.product_name} <span className="text-muted-foreground">×{s.qty}</span></div>
+                        <div className="text-[10px] text-muted-foreground">{fmtDateTime(s.created_at)}</div>
+                      </div>
+                      <div className="text-right shrink-0 ml-3">
+                        <div className="font-bold">{fmtMoney(Number(s.sell_price) * s.qty)}</div>
+                        <div className="text-[10px] text-emerald-600">+{fmtMoney(s.profit)}</div>
+                      </div>
                     </div>
-                    <div className="text-right shrink-0 ml-3">
-                      <div className="font-bold">{fmtMoney(Number(s.sell_price) * s.qty)}</div>
-                      <div className="text-[10px] text-emerald-600">+{fmtMoney(s.profit)}</div>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                {sortedRecentSales.length > recentSalesToShow.length && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-xs h-8 hover:bg-accent border border-dashed border-border/60"
+                    onClick={() => setActivityLimit(prev => prev + 5)}
+                  >
+                    {lang === "bn" ? "আরও লোড করুন ↓" : "Load More ↓"}
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -1157,6 +1310,12 @@ export default function Dashboard() {
           </DialogContent>
         </Dialog>
       )}
+
+      <SaleDialog
+        open={saleOpen}
+        onOpenChange={setSaleOpen}
+        presetType={salePresetType}
+      />
     </div>
   );
 }

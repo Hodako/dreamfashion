@@ -46,9 +46,10 @@ export default function ProductsPage() {
   const [activeTab, setActiveTab] = useState<"active" | "archived" | "low_stock">("active");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [sellCart, setSellCart] = useState<{ product: Product; qty: number; sellPrice: number }[]>([]);
+  const [showCartPanel, setShowCartPanel] = useState(false);
   const [returnProduct, setReturnProduct] = useState<Product | null>(null);
   const [returnOpen, setReturnOpen] = useState(false);
-  const [statsExpanded, setStatsExpanded] = useState(true);
+  const [statsExpanded, setStatsExpanded] = useState(false);
 
   const [sellType, setSellType] = useState<"cash" | "credit" | "online">("cash");
   const [sellPartyId, setSellPartyId] = useState("");
@@ -93,6 +94,7 @@ export default function ProductsPage() {
       }
       toast.success(t("record_sale"));
       setSellCart([]);
+      setShowCartPanel(false);
       setSellPartyId("");
       setSellPaidAmount("");
       qc.invalidateQueries({ queryKey: ["sales"] });
@@ -234,6 +236,20 @@ export default function ProductsPage() {
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-lg sm:text-xl font-bold">{t("products")}</h1>
         <div className="flex gap-1.5 items-center">
+          <Button
+            size="sm"
+            variant={showCartPanel ? "default" : "outline"}
+            className="h-8 text-[10px] sm:text-xs relative"
+            onClick={() => setShowCartPanel(prev => !prev)}
+          >
+            <ShoppingCart className="size-3.5 mr-1" />
+            {t("cart")}
+            {sellCart.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-destructive text-white rounded-full size-3.5 flex items-center justify-center text-[8px] font-bold">
+                {sellCart.reduce((sum, item) => sum + item.qty, 0)}
+              </span>
+            )}
+          </Button>
           <Button size="sm" variant="outline" className="h-8 text-[10px] sm:text-xs" onClick={exportProducts}>
             <Download className="size-3.5 mr-1" />
             {isMobile ? "" : t("download_csv")}
@@ -244,7 +260,7 @@ export default function ProductsPage() {
 
       <div className="relative">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground z-10 pointer-events-none" />
-        <Input className="pl-10 h-9 text-sm" placeholder={t("search_products")} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+        <Input style={{ paddingLeft: "2.5rem" }} className="pl-10 h-9 text-sm" placeholder={t("search_products")} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
       </div>
 
       {/* Category Pills Slider */}
@@ -286,24 +302,28 @@ export default function ProductsPage() {
       </Tabs>
 
       {/* Sell Basket Panel */}
-      {sellCart.length > 0 && (
-        <Card className="p-3 border-emerald-500/30 bg-emerald-500/5 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <ShoppingCart className="size-4 text-emerald-600 dark:text-emerald-400" />
-              <span className="font-semibold text-xs text-emerald-800 dark:text-emerald-300">
-                {t("cart")} ({sellCart.reduce((sum, item) => sum + item.qty, 0)})
-              </span>
+      {showCartPanel && (
+        sellCart.length > 0 ? (
+          <Card className="p-3 border-emerald-500/30 bg-emerald-500/5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <ShoppingCart className="size-4 text-emerald-600 dark:text-emerald-400" />
+                <span className="font-semibold text-xs text-emerald-800 dark:text-emerald-300">
+                  {t("cart")} ({sellCart.reduce((sum, item) => sum + item.qty, 0)})
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6 text-muted-foreground hover:text-destructive"
+                onClick={() => {
+                  setSellCart([]);
+                  setShowCartPanel(false);
+                }}
+              >
+                <X className="size-4" />
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6 text-muted-foreground hover:text-destructive"
-              onClick={() => setSellCart([])}
-            >
-              <X className="size-4" />
-            </Button>
-          </div>
 
           <div className="max-h-[220px] overflow-y-auto divide-y divide-border/60 pr-1 space-y-2">
             {sellCart.map((item, index) => (
@@ -429,6 +449,27 @@ export default function ProductsPage() {
             </Button>
           </div>
         </Card>
+        ) : (
+          <Card className="p-3 border border-dashed border-border/80 bg-muted/5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <ShoppingCart className="size-4 text-muted-foreground/60" />
+                <span className="font-semibold text-xs">{t("cart_empty")}</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6 text-muted-foreground hover:text-destructive"
+                onClick={() => setShowCartPanel(false)}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground text-center py-2">
+              {lang === "bn" ? "পণ্য যোগ করতে কার্ডের '+ বিক্রি' বোতামে চাপুন" : "Click '+ Sell' on any product card to add it to cart"}
+            </p>
+          </Card>
+        )
       )}
 
       {!productsData && <p className="text-xs text-muted-foreground">{t("loading")}</p>}
@@ -453,6 +494,7 @@ export default function ProductsPage() {
                   }
                   return [...prev, { product: p, qty: 1, sellPrice: p.sell_price || p.buy_price || 0 }];
                 });
+                setShowCartPanel(true);
                 toast.success(`${p.name} -> ${t("cart")}`);
               }}
               onDirectSell={() => {
@@ -576,7 +618,7 @@ function ProductCard({
     >
       <div>
         <div className="relative rounded overflow-hidden">
-          <ProductImage path={p.image_url} className="w-full aspect-square object-cover" />
+          <ProductImage path={p.image_url} className="w-full aspect-[4/3] sm:aspect-square object-cover max-h-24 sm:max-h-none" />
           {!p.archived && isLowStock && (
             <div className="absolute top-1 right-1 bg-destructive text-destructive-foreground p-0.5 rounded-full shadow" title={t("critical_stock")}>
               <AlertCircle className="size-3" />
@@ -604,11 +646,11 @@ function ProductCard({
 
           <div className="flex justify-between text-[8px] sm:text-[10px] pt-1">
             <span className="text-muted-foreground">{t("sell_price")}</span>
-            <span className="font-semibold">{p.sell_price > 0 ? fmtMoney(p.sell_price) : "—"}</span>
+            <span className="font-bold text-indigo-600 dark:text-indigo-400 font-serif">{p.sell_price > 0 ? fmtMoney(p.sell_price) : "—"}</span>
           </div>
           <div className="flex justify-between text-[8px] sm:text-[10px]">
             <span className="text-muted-foreground">{t("stock")}</span>
-            <span className={isLowStock ? "text-destructive font-semibold" : ""}>{p.stock}</span>
+            <span className={isLowStock ? "text-rose-600 dark:text-rose-400 font-bold" : "text-emerald-600 dark:text-emerald-400 font-bold"}>{p.stock}</span>
           </div>
         </div>
       </div>
@@ -646,6 +688,9 @@ function ProductCard({
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onArchive()} className="text-xs">
                   <Archive className="size-3 mr-1.5" /> {t("archive")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onDelete()} className="text-xs text-destructive">
+                  <Trash2 className="size-3 mr-1.5" /> {t("delete")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

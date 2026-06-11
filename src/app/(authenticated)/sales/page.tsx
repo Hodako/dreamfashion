@@ -17,9 +17,9 @@ import { useT } from "@/lib/i18n";
 import { fmtMoney, fmtDateTime } from "@/lib/format";
 import { FAB } from "../products/page";
 import { SaleDialog } from "@/components/sale-dialog";
-import { RotateCcw, Search } from "lucide-react";
+import { RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { createReturnFn } from "@/lib/rpc";
+import { createReturnFn, deleteSaleFn } from "@/lib/rpc";
 
 
 
@@ -66,6 +66,7 @@ export default function SalesPage() {
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground z-10 pointer-events-none" />
           <Input
+            style={{ paddingLeft: "2.5rem" }}
             className="pl-10 h-9 text-sm"
             placeholder={t("search_sales")}
             value={search}
@@ -112,7 +113,21 @@ function SalesTab({
   onReturn: (sale: Sale) => void;
 }) {
   const { t } = useT();
+  const qc = useQueryClient();
   const { items: paged, totalPages, safePage } = paginate(items, page, pageSize);
+
+  async function handleDelete(id: string) {
+    if (!confirm(t("delete") + "?")) return;
+    try {
+      await deleteSaleFn({ data: { id } });
+      toast.success(t("delete") || "Deleted successfully");
+      qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["cashbox"] });
+    } catch (err: any) {
+      toast.error(err.message || String(err));
+    }
+  }
 
   if (items.length === 0) {
     return <Card className="p-8 text-center text-sm text-muted-foreground">{t("no_sales")}</Card>;
@@ -138,11 +153,21 @@ function SalesTab({
                 ? <div className="text-xs text-warning">{t("due")}: {fmtMoney(s.due_amount)}</div>
                 : <div className="text-xs text-success">+{fmtMoney(s.profit)}</div>}
             </div>
-            {s.product_id && !s.returned && (
-              <Button size="sm" variant="outline" className="h-8 px-2 shrink-0" onClick={() => onReturn(s)}>
-                <RotateCcw className="size-3.5" />
+            <div className="flex items-center gap-1.5 shrink-0">
+              {s.product_id && !s.returned && (
+                <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => onReturn(s)}>
+                  <RotateCcw className="size-3.5" />
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0 text-destructive"
+                onClick={() => handleDelete(s.id)}
+              >
+                <Trash2 className="size-3.5" />
               </Button>
-            )}
+            </div>
           </div>
         ))}
       </Card>

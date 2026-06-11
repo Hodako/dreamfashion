@@ -133,6 +133,7 @@ export default function PartiesPage() {
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground z-10 pointer-events-none" />
           <Input
+            style={{ paddingLeft: "2.5rem" }}
             className="pl-10"
             placeholder={t("search_parties")}
             value={search}
