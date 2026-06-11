@@ -7,7 +7,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Plus, Pencil, Trash2, Search, Archive, Download, Eye, AlertCircle, MoreVertical, ShoppingCart, Minus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { getProducts, getSales, type Product } from "@/lib/queries";
+import { getProducts, getSales, getParties, type Product } from "@/lib/queries";
 import { useT } from "@/lib/i18n";
 import { fmtMoney } from "@/lib/format";
 import { ProductImage } from "@/components/product-image";
@@ -17,7 +17,7 @@ import { PurchaseDialog } from "@/components/purchase-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { deleteProductFn, archiveProductFn, createDirectProductReturnFn } from "@/lib/rpc";
+import { deleteProductFn, archiveProductFn, createDirectProductReturnFn, createSaleFn } from "@/lib/rpc";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { downloadCsv, exportDateStamp } from "@/lib/export";
@@ -49,6 +49,62 @@ export default function ProductsPage() {
   const [returnProduct, setReturnProduct] = useState<Product | null>(null);
   const [returnOpen, setReturnOpen] = useState(false);
   const [statsExpanded, setStatsExpanded] = useState(true);
+
+  const [sellType, setSellType] = useState<"cash" | "credit" | "online">("cash");
+  const [sellPartyId, setSellPartyId] = useState("");
+  const [sellPaidAmount, setSellPaidAmount] = useState("");
+  const [sellBusy, setSellBusy] = useState(false);
+
+  const partiesQuery = useCachedQuery(["parties"], getParties);
+  const parties = partiesQuery.data ?? [];
+
+  async function handleCompleteDirectSell() {
+    if (sellCart.length === 0) return;
+    if (sellType === "credit" && !sellPartyId) {
+      toast.error(t("party") + " " + t("required"));
+      return;
+    }
+    setSellBusy(true);
+    try {
+      const total = sellCart.reduce((sum, item) => sum + item.qty * item.sellPrice, 0);
+      const paidNum = (sellType === "cash" || sellType === "online") ? total : Number(sellPaidAmount) || 0;
+      const due = Math.max(total - paidNum, 0);
+      const duePerItem = sellType === "credit" ? due / sellCart.length : 0;
+      const paidPerItem = sellType === "credit" ? paidNum / sellCart.length : 0;
+      for (const item of sellCart) {
+        const qtyNum = item.qty;
+        const sellPrice = item.sellPrice;
+        const lineSell = sellPrice * qtyNum;
+        const lineProfit = (sellPrice - item.product.buy_price) * qtyNum;
+        await createSaleFn({
+          data: {
+            product_id: item.product.id,
+            product_name: item.product.name,
+            qty: qtyNum,
+            buy_price: item.product.buy_price,
+            sell_price: sellPrice,
+            profit: lineProfit,
+            type: sellType,
+            party_id: sellType === "credit" ? sellPartyId : null,
+            paid_amount: sellType === "credit" ? paidPerItem : lineSell,
+            due_amount: sellType === "credit" ? duePerItem : 0,
+          }
+        });
+      }
+      toast.success(t("record_sale"));
+      setSellCart([]);
+      setSellPartyId("");
+      setSellPaidAmount("");
+      qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["party-detail"] });
+      qc.invalidateQueries({ queryKey: ["cashbox"] });
+    } catch (err: any) {
+      toast.error(err.message || String(err));
+    } finally {
+      setSellBusy(false);
+    }
+  }
 
   const pageSize = isMobile ? 12 : 24;
 
@@ -249,66 +305,127 @@ export default function ProductsPage() {
             </Button>
           </div>
 
-          <div className="max-h-[160px] overflow-y-auto divide-y divide-border/60 pr-1">
+          <div className="max-h-[220px] overflow-y-auto divide-y divide-border/60 pr-1 space-y-2">
             {sellCart.map((item, index) => (
-              <div key={item.product.id} className="flex items-center justify-between py-1.5 text-xs gap-2">
-                <span className="truncate flex-1 font-medium">{item.product.name}</span>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSellCart(prev =>
-                        prev
-                          .map((x, i) => (i === index ? { ...x, qty: x.qty - 1 } : x))
-                          .filter(x => x.qty > 0)
-                      );
-                    }}
-                    className="size-5 rounded bg-muted hover:bg-muted-foreground/15 grid place-items-center"
-                  >
-                    <Minus className="size-3" />
-                  </button>
-                  <span className="font-mono text-xs w-4 text-center">{item.qty}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSellCart(prev =>
-                        prev.map((x, i) => (i === index ? { ...x, qty: Math.min(x.qty + 1, x.product.stock) } : x))
-                      );
-                    }}
-                    disabled={item.qty >= item.product.stock}
-                    className="size-5 rounded bg-muted hover:bg-muted-foreground/15 grid place-items-center disabled:opacity-40"
-                  >
-                    <Plus className="size-3" />
-                  </button>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="font-mono text-xs w-16 text-right">{fmtMoney(item.qty * item.sellPrice)}</span>
+              <div key={item.product.id} className="flex flex-col gap-1.5 py-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate flex-1 font-medium text-emerald-950 dark:text-emerald-50">{item.product.name}</span>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-5 text-destructive"
+                    className="size-5 text-destructive hover:bg-destructive/10 shrink-0"
                     onClick={() => setSellCart(prev => prev.filter((_, i) => i !== index))}
                   >
-                    <Trash2 className="size-3" />
+                    <Trash2 className="size-3.5" />
                   </Button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1 flex-1">
+                    <span className="text-[10px] text-muted-foreground shrink-0">{t("qty")}:</span>
+                    <Input
+                      type="number"
+                      min="1"
+                      max={item.product.stock}
+                      value={item.qty}
+                      onChange={(e) => {
+                        const val = Math.max(1, Math.min(item.product.stock, Number(e.target.value) || 1));
+                        setSellCart(prev => prev.map((x, i) => i === index ? { ...x, qty: val } : x));
+                      }}
+                      className="h-7 text-xs bg-background text-center p-1 w-16"
+                    />
+                    <span className="text-[9px] text-muted-foreground">/ {item.product.stock}</span>
+                  </div>
+                  <div className="flex items-center gap-1 flex-1 justify-end">
+                    <span className="text-[10px] text-muted-foreground shrink-0">{t("sell_price")}:</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={item.sellPrice}
+                      onChange={(e) => {
+                        const val = Math.max(0, Number(e.target.value) || 0);
+                        setSellCart(prev => prev.map((x, i) => i === index ? { ...x, sellPrice: val } : x));
+                      }}
+                      className="h-7 text-xs bg-background text-center p-1 w-24"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end text-[10px] font-mono text-muted-foreground">
+                  Subtotal: {fmtMoney(item.qty * item.sellPrice)}
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="flex items-center justify-between border-t border-emerald-500/20 pt-2 text-xs">
-            <div>
-              <span className="text-muted-foreground">{t("total")}: </span>
-              <span className="font-bold text-sm">{fmtMoney(sellCart.reduce((sum, item) => sum + item.qty * item.sellPrice, 0))}</span>
+          <div className="border-t border-emerald-500/20 pt-2.5 space-y-2.5">
+            <div className="flex gap-1">
+              {(["cash", "credit", "online"] as const).map((mode) => (
+                <Button
+                  key={mode}
+                  type="button"
+                  variant={sellType === mode ? "default" : "outline"}
+                  className="h-7 text-[10px] flex-1 px-1"
+                  onClick={() => setSellType(mode)}
+                >
+                  {mode === "cash" ? t("cash_sale") : mode === "credit" ? t("credit_sale") : t("online_sell")}
+                </Button>
+              ))}
             </div>
+
+            {sellType === "credit" && (
+              <div className="space-y-1.5 p-2 bg-background/50 rounded border border-emerald-500/10">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground w-12 shrink-0">{t("party")}:</span>
+                  <select
+                    value={sellPartyId}
+                    onChange={e => setSellPartyId(e.target.value)}
+                    className="h-7 rounded border border-input bg-background px-2 text-xs flex-1"
+                  >
+                    <option value="">— Select Party —</option>
+                    {parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground w-12 shrink-0">{t("paid_amount")}:</span>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={sellPaidAmount}
+                    onChange={e => setSellPaidAmount(e.target.value)}
+                    className="h-7 text-xs bg-background"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[10px] pt-1">
+                  <span className="text-muted-foreground">{t("due_amount")}:</span>
+                  <span className="font-semibold text-warning">
+                    {fmtMoney(Math.max(0, sellCart.reduce((sum, item) => sum + item.qty * item.sellPrice, 0) - (Number(sellPaidAmount) || 0)))}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between text-xs font-medium">
+              <div>
+                <span className="text-muted-foreground">{t("total")}: </span>
+                <span className="font-bold text-sm text-emerald-950 dark:text-emerald-50">
+                  {fmtMoney(sellCart.reduce((sum, item) => sum + item.qty * item.sellPrice, 0))}
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-muted-foreground">{t("profit")}: </span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                  {fmtMoney(sellCart.reduce((sum, item) => sum + (item.sellPrice - item.product.buy_price) * item.qty, 0))}
+                </span>
+              </div>
+            </div>
+
             <Button
               size="sm"
-              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4"
-              onClick={() => {
-                setSaleOpen(true);
-              }}
+              disabled={sellBusy}
+              className="w-full h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+              onClick={handleCompleteDirectSell}
             >
-              {t("sell_selected")}
+              {sellBusy ? "..." : t("record_sale")}
             </Button>
           </div>
         </Card>
@@ -329,8 +446,14 @@ export default function ProductsPage() {
               isLowStock={isLowStock}
               t={t}
               onSell={() => {
-                setSaleProduct(p.id);
-                setSaleOpen(true);
+                setSellCart(prev => {
+                  const existing = prev.find(x => x.product.id === p.id);
+                  if (existing) {
+                    return prev.map(x => x.product.id === p.id ? { ...x, qty: Math.min(x.qty + 1, p.stock) } : x);
+                  }
+                  return [...prev, { product: p, qty: 1, sellPrice: p.sell_price || p.buy_price || 0 }];
+                });
+                toast.success(`${p.name} -> ${t("cart")}`);
               }}
               onDirectSell={() => {
                 setSaleProduct(p.id);
