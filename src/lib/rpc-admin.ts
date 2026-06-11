@@ -299,7 +299,12 @@ export async function deleteLicenseFn(input: { data: { licenseKey: string } }) {
   const db = await getDb();
   const key = data.licenseKey.trim().toUpperCase();
   const license = await db.collection("licenses").findOne({ _id: key });
-  if (!license) throw new Error("License not found");
+  if (!license) {
+    // License already deleted or never existed - consider deletion successful
+    // This handles race conditions where license appears in UI list but
+    // has been deleted by another process, or replication lag in distributed systems
+    return { success: true };
+  }
   if (license.used) throw new Error("Cannot delete a license that is already used");
 
   if (license.type === "platform") {
