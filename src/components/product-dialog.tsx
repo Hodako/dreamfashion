@@ -26,6 +26,7 @@ export function ProductDialog({
   
   const [name, setName] = useState("");
   const [buy, setBuy] = useState("");
+  const [sellPrice, setSellPrice] = useState("");
   const [stock, setStock] = useState("0");
   const [minStock, setMinStock] = useState("5");
   const [category, setCategory] = useState("");
@@ -39,6 +40,7 @@ export function ProductDialog({
     if (open) {
       setName(product?.name ?? "");
       setBuy(String(product?.buy_price ?? ""));
+      setSellPrice(String(product?.sell_price ?? ""));
       setStock(String(product?.stock ?? "0"));
       setMinStock(String(product?.min_stock ?? "5"));
       setCategory(product?.category ?? "");
@@ -91,7 +93,7 @@ export function ProductDialog({
         name,
         image_url,
         buy_price: Number(buy) || 0,
-        sell_price: product?.sell_price ?? 0,
+        sell_price: Number(sellPrice) || 0,
         stock: Number(stock) || 0,
         min_stock: Number(minStock) ?? 5,
         category: category.trim(),
@@ -101,7 +103,7 @@ export function ProductDialog({
       if (product) {
         await updateProductFn({ data: { id: product.id, ...payload } });
       } else {
-        await createProductFn({ data: { ...payload, sell_price: 0 } });
+        await createProductFn({ data: payload });
       }
 
       toast.success(t("save"));
@@ -125,6 +127,9 @@ export function ProductDialog({
           <Field label={t("product_name")}><Input required placeholder={t("product_name")} value={name} onChange={e => setName(e.target.value)} /></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t("buy_price")}><Input inputMode="decimal" placeholder={t("buy_price")} value={buy} onChange={e => setBuy(e.target.value)} /></Field>
+            <Field label={t("sell_price") || "Selling Price"}><Input inputMode="decimal" placeholder={t("sell_price") || "Selling Price"} value={sellPrice} onChange={e => setSellPrice(e.target.value)} /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <Field label={t("category")}>
               <div className="relative flex items-center">
                 <Input
@@ -150,10 +155,10 @@ export function ProductDialog({
                 )}
               </div>
             </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={t("stock")}><Input inputMode="numeric" placeholder={t("stock")} value={stock} onChange={e => setStock(e.target.value)} /></Field>
             <Field label={t("min_stock")}><Input inputMode="numeric" placeholder="5" value={minStock} onChange={e => setMinStock(e.target.value)} /></Field>
+          </div>
+          <div className="grid grid-cols-1">
+            <Field label={t("stock")}><Input inputMode="numeric" placeholder={t("stock")} value={stock} onChange={e => setStock(e.target.value)} /></Field>
           </div>
 
           <div className="space-y-1.5 border-t border-border pt-2.5">
@@ -189,12 +194,6 @@ export function ProductDialog({
             </div>
           </div>
 
-          {!product && (
-            <p className="text-xs text-muted-foreground">{t("sell_price_on_purchase")}</p>
-          )}
-          {product && product.sell_price > 0 && (
-            <p className="text-xs text-muted-foreground">{t("sell_price")}: ৳{product.sell_price}</p>
-          )}
           <DialogFooter className="gap-2 border-t border-border pt-2.5">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t("cancel")}</Button>
             <Button type="submit" disabled={busy}>{busy ? "…" : t("save")}</Button>

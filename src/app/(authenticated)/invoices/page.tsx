@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import { getProducts, getParties, type Product, type Party } from "@/lib/queries";
 import { useT } from "@/lib/i18n";
@@ -16,6 +16,7 @@ import { ProductSearchSelect } from "@/components/product-search";
 import { toast } from "sonner";
 import { Plus, Trash2, Printer, ArrowLeft, RefreshCw, ShoppingCart } from "lucide-react";
 import Link from "next/link";
+import { getBusinessSettingsFn } from "@/lib/rpc-admin";
 
 type InvoiceItem = {
   product: Product;
@@ -86,6 +87,61 @@ export default function InvoicePage() {
   const total = Math.max(subtotal - discountAmount, 0);
   const paidAmount = Number(paid) || 0;
   const due = Math.max(total - paidAmount, 0);
+
+  const settingsQuery = useQuery({
+    queryKey: ["business-settings"],
+    queryFn: getBusinessSettingsFn,
+  });
+  const biz = settingsQuery.data?.business;
+
+  const paymentStatus = useMemo(() => {
+    if (total <= 0) return "PAID";
+    if (paidAmount >= total) return "PAID";
+    if (paidAmount === 0) return "DUE";
+    return "PARTIAL";
+  }, [total, paidAmount]);
+
+  const colorTheme = biz?.invoice_color || "black";
+  const colorClasses = useMemo(() => {
+    switch (colorTheme) {
+      case "emerald":
+        return {
+          text: "text-emerald-700",
+          border: "border-emerald-500",
+          bg: "bg-emerald-50/50",
+          headerBg: "bg-emerald-100/60",
+          accentText: "text-emerald-800",
+          borderLight: "border-emerald-200/50",
+        };
+      case "indigo":
+        return {
+          text: "text-indigo-700",
+          border: "border-indigo-500",
+          bg: "bg-indigo-50/50",
+          headerBg: "bg-indigo-100/60",
+          accentText: "text-indigo-800",
+          borderLight: "border-indigo-200/50",
+        };
+      case "rose":
+        return {
+          text: "text-rose-700",
+          border: "border-rose-500",
+          bg: "bg-rose-50/50",
+          headerBg: "bg-rose-100/60",
+          accentText: "text-rose-800",
+          borderLight: "border-rose-200/50",
+        };
+      default:
+        return {
+          text: "text-zinc-800",
+          border: "border-zinc-400",
+          bg: "bg-zinc-50",
+          headerBg: "bg-zinc-100",
+          accentText: "text-zinc-900",
+          borderLight: "border-zinc-200",
+        };
+    }
+  }, [colorTheme]);
 
   const activeCustomerName = useMemo(() => {
     if (selectedPartyId === "walk-in") return customName.trim() || t("walk_in_customer");
@@ -337,11 +393,20 @@ export default function InvoicePage() {
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* Printable Invoice Page (Always structured cleanly for Print view) */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      <div className="hidden print:block invoice-print max-w-4xl mx-auto bg-white text-black p-8 font-sans space-y-6 text-sm">
+      <div className="hidden print:block invoice-print max-w-4xl mx-auto bg-white text-black p-8 font-sans space-y-6 text-sm relative overflow-hidden">
+        {/* Watermark background overlay */}
+        {biz?.invoice_watermark_enabled && biz?.invoice_watermark && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden z-0 opacity-[0.08] dark:opacity-[0.05]">
+            <span className="text-[120px] font-black uppercase tracking-widest -rotate-45 text-zinc-950 font-sans whitespace-nowrap">
+              {biz.invoice_watermark}
+            </span>
+          </div>
+        )}
+
         {/* Header section */}
-        <div className="flex justify-between items-start border-b pb-6">
+        <div className={`flex justify-between items-start border-b-2 pb-6 ${colorClasses.border}`}>
           <div className="space-y-1.5">
-            <h1 className="text-2xl font-bold uppercase tracking-wide text-black">{user?.business_name || "HakimEzy"}</h1>
+            <h1 className={`text-2xl font-bold uppercase tracking-wide ${colorClasses.accentText}`}>{user?.business_name || "HakimEzy"}</h1>
             <p className="text-xs text-zinc-500">{t("tagline")}</p>
             <p className="text-xs text-zinc-500">{user?.email}</p>
           </div>
@@ -349,13 +414,24 @@ export default function InvoicePage() {
             <h2 className="text-xl font-bold uppercase text-zinc-800">{t("invoices")}</h2>
             <div className="text-xs text-zinc-600"><strong>{t("invoice_no")}:</strong> {invoiceNo}</div>
             <div className="text-xs text-zinc-600"><strong>{t("date")}:</strong> {fmtDate(new Date().toISOString())}</div>
+            <div className="flex justify-end pt-1">
+              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border uppercase tracking-widest ${
+                paymentStatus === "PAID"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : paymentStatus === "DUE"
+                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                  : "bg-amber-50 text-amber-700 border-amber-200"
+              }`}>
+                {paymentStatus}
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Client details info */}
         <div className="grid grid-cols-2 gap-6 pt-2">
-          <div className="space-y-1 p-3 bg-zinc-50 rounded-lg">
-            <h3 className="text-xs font-bold uppercase text-zinc-700">{t("billed_to")}:</h3>
+          <div className={`space-y-1 p-3 rounded-lg ${colorClasses.bg}`}>
+            <h3 className={`text-xs font-bold uppercase ${colorClasses.text}`}>{t("billed_to")}:</h3>
             <div className="font-semibold text-black">{activeCustomerName}</div>
             <div className="text-zinc-600">{activeCustomerPhone}</div>
           </div>
@@ -368,7 +444,7 @@ export default function InvoicePage() {
         <div className="pt-4">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-zinc-300 bg-zinc-100 text-zinc-700">
+              <tr className={`border-b-2 ${colorClasses.border} ${colorClasses.headerBg} ${colorClasses.text}`}>
                 <th className="py-2 px-3">#</th>
                 <th className="py-2 px-3">{t("product_name")}</th>
                 <th className="py-2 px-3 text-right">{t("sell_price")}</th>
@@ -378,7 +454,7 @@ export default function InvoicePage() {
             </thead>
             <tbody>
               {invoiceItems.map((item, index) => (
-                <tr key={item.product.id} className="border-b border-zinc-200">
+                <tr key={item.product.id} className={`border-b ${colorClasses.borderLight}`}>
                   <td className="py-2 px-3 text-zinc-500 font-mono">{index + 1}</td>
                   <td className="py-2 px-3 font-medium">{item.product.name}</td>
                   <td className="py-2 px-3 text-right">{fmtMoney(item.sellPrice)}</td>
@@ -392,27 +468,27 @@ export default function InvoicePage() {
 
         {/* Total calculation panel */}
         <div className="flex justify-end pt-4">
-          <div className="w-64 space-y-2 border-t pt-3 border-zinc-200 text-xs">
+          <div className={`w-64 space-y-2 border-t pt-3 ${colorClasses.border} text-xs`}>
             <div className="flex justify-between text-zinc-600">
               <span>{t("subtotal")}</span>
               <span>{fmtMoney(subtotal)}</span>
             </div>
             {discountAmount > 0 && (
-              <div className="flex justify-between text-rose-600">
+              <div className="flex justify-between text-rose-600 font-medium">
                 <span>{t("discount")}</span>
                 <span>-{fmtMoney(discountAmount)}</span>
               </div>
             )}
-            <div className="flex justify-between border-t border-zinc-300 pt-2 font-bold text-sm text-black">
+            <div className={`flex justify-between border-t pt-2 font-bold text-sm ${colorClasses.border} ${colorClasses.accentText}`}>
               <span>{t("payable_amount")}</span>
               <span>{fmtMoney(total)}</span>
             </div>
-            <div className="flex justify-between text-emerald-700">
+            <div className="flex justify-between text-emerald-700 font-medium">
               <span>{t("paid_amount")}</span>
               <span>{fmtMoney(paidAmount)}</span>
             </div>
             {due > 0 && (
-              <div className="flex justify-between border-t border-dashed pt-1 text-rose-600">
+              <div className="flex justify-between border-t border-dashed pt-1 text-rose-600 font-semibold border-rose-300">
                 <span>{t("due_amount")}</span>
                 <span>{fmtMoney(due)}</span>
               </div>
@@ -421,9 +497,13 @@ export default function InvoicePage() {
         </div>
 
         {/* Footer text print area */}
-        <div className="text-center pt-12 border-t border-zinc-200 text-[10px] text-zinc-500">
-          <p>Generated via {user?.business_name || "HakimEzy"} Invoice Manager.</p>
-          <p className="mt-1">Thank you for your business!</p>
+        <div className="text-center pt-10 border-t border-zinc-200 text-[10px] text-zinc-500 space-y-1">
+          {biz?.invoice_terms ? (
+            <p className="font-medium text-zinc-700 whitespace-pre-line leading-relaxed">{biz.invoice_terms}</p>
+          ) : (
+            <p>Thank you for your business!</p>
+          )}
+          <p className="text-[9px] text-zinc-400 pt-2">Generated via {user?.business_name || "HakimEzy"} Invoice Manager.</p>
         </div>
       </div>
     </div>

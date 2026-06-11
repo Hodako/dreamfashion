@@ -55,6 +55,10 @@ export default function SettingsPage() {
           business_type: String(fd.get("business_type") || "retail"),
           theme: "green",
           employee_limit: Number(fd.get("employee_limit")) || 5,
+          invoice_watermark: String(fd.get("invoice_watermark") || ""),
+          invoice_watermark_enabled: fd.get("invoice_watermark_enabled") === "true",
+          invoice_terms: String(fd.get("invoice_terms") || ""),
+          invoice_color: String(fd.get("invoice_color") || "black"),
         },
       });
       await refresh();
@@ -160,6 +164,33 @@ export default function SettingsPage() {
                 <option value="clean">solid clean</option>
                 <option value="glass">glassmorphism</option>
               </select>
+            </div>
+            <div className="border-t border-border pt-3 mt-3 space-y-3">
+              <h3 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">Invoice Customize Settings</h3>
+              <div className="space-y-1">
+                <Label className="text-xs">Invoice Watermark Text</Label>
+                <Input name="invoice_watermark" defaultValue={biz.invoice_watermark || ""} placeholder="PAID" />
+              </div>
+              <div className="space-y-1 flex items-center justify-between">
+                <Label className="text-xs">Enable Watermark</Label>
+                <select name="invoice_watermark_enabled" defaultValue={String(biz.invoice_watermark_enabled)} className="h-8 rounded border border-input bg-input px-2 text-xs w-28">
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Invoice Terms & Conditions / Footer Notes</Label>
+                <textarea name="invoice_terms" defaultValue={biz.invoice_terms || ""} className="w-full min-h-[60px] rounded-md border border-input bg-input p-2 text-xs" placeholder="e.g. No refund after 7 days" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Invoice Print Theme Color</Label>
+                <select name="invoice_color" defaultValue={biz.invoice_color || "black"} className="w-full h-9 rounded-md border border-input bg-input px-3 text-xs capitalize">
+                  <option value="black">black</option>
+                  <option value="emerald">emerald (green)</option>
+                  <option value="indigo">indigo</option>
+                  <option value="rose">rose (red)</option>
+                </select>
+              </div>
             </div>
             <Button type="submit" disabled={busy} className="w-full sm:w-auto">{busy ? "…" : t("save")}</Button>
           </form>

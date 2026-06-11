@@ -397,8 +397,8 @@
   input, select, textarea {
     font-size: 0.825rem !important;
     height: 2.25rem !important;
-    padding-left: 0.5rem !important;
-    padding-right: 0.5rem !important;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
   }
 
   /* Compact spacing for grid on mobile */

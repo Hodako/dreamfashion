@@ -26,6 +26,7 @@ import {
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import { setCachedData, refreshQueries } from "@/lib/optimistic-cache";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function PartyDetail() {
   const params = useParams();

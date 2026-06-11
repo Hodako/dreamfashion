@@ -380,6 +380,48 @@ export async function createReturnFn(input: { data: { sale_id: string; qty: numb
   return { ...doc, id };
 }
 
+export async function createDirectProductReturnFn(input: { data: { product_id: string; qty: number; return_price: number; note?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const product = await db.collection("products").findOne({ _id: data.product_id, owner_id: session.ownerId });
+  if (!product) throw new Error("Product not found");
+  
+  const returnQty = Number(data.qty);
+  if (returnQty <= 0) throw new Error("Invalid quantity");
+
+  const id = crypto.randomUUID();
+  const doc = {
+    _id: id,
+    owner_id: session.ownerId,
+    sale_id: null,
+    product_id: data.product_id,
+    product_name: product.name,
+    qty: returnQty,
+    return_price: Number(data.return_price) || 0,
+    note: data.note || null,
+    created_at: new Date().toISOString(),
+  };
+  await db.collection("returns").insertOne(doc);
+
+  await db.collection("products").updateOne(
+    { _id: data.product_id, owner_id: session.ownerId },
+    { $set: { stock: ((product.stock as number) ?? 0) + returnQty } }
+  );
+
+  const refundAmt = returnQty * (Number(data.return_price) || 0);
+  if (refundAmt > 0) {
+    await insertCashboxEntry(db, session.ownerId, {
+      kind: "withdraw",
+      amount: refundAmt,
+      note: `Direct Return: ${product.name} (Qty: ${returnQty})`,
+      ref_id: id,
+    });
+  }
+
+  return { ...doc, id };
+}
+
 export async function getReturnsFn() {
   const session = await requireSession();
   const db = await getDb();

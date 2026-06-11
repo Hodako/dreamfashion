@@ -3,7 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import { PaginationBar, paginate } from "@/components/ui/pagination-bar";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Plus, Pencil, Trash2, Search, Archive, Download, Eye, AlertCircle, MoreVertical, ShoppingCart, Minus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,9 @@ import { PurchaseDialog } from "@/components/purchase-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { deleteProductFn, archiveProductFn } from "@/lib/rpc";
+import { deleteProductFn, archiveProductFn, createDirectProductReturnFn } from "@/lib/rpc";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { downloadCsv, exportDateStamp } from "@/lib/export";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -44,6 +46,8 @@ export default function ProductsPage() {
   const [activeTab, setActiveTab] = useState<"active" | "archived" | "low_stock">("active");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [sellCart, setSellCart] = useState<{ product: Product; qty: number; sellPrice: number }[]>([]);
+  const [returnProduct, setReturnProduct] = useState<Product | null>(null);
+  const [returnOpen, setReturnOpen] = useState(false);
 
   const pageSize = isMobile ? 12 : 24;
 
@@ -164,8 +168,8 @@ export default function ProductsPage() {
       </div>
 
       <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-        <Input className="pl-8 h-9 text-sm" placeholder={t("search_products")} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground z-10" />
+        <Input className="pl-9 h-9 text-sm" placeholder={t("search_products")} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
       </div>
 
       {/* Category Pills Slider */}
@@ -300,102 +304,37 @@ export default function ProductsPage() {
         {productsToShow.map(p => {
           const isLowStock = p.stock <= (p.min_stock ?? 5);
           return (
-            <Card key={p.id} className={`overflow-hidden border-border/60 flex flex-col justify-between p-1 sm:p-1.5 gap-1 ${p.archived ? "opacity-60" : ""}`}>
-              <div>
-                <div className="relative rounded overflow-hidden">
-                  <ProductImage path={p.image_url} className="w-full aspect-square object-cover" />
-                  {!p.archived && isLowStock && (
-                    <div className="absolute top-1 right-1 bg-destructive text-destructive-foreground p-0.5 rounded-full shadow" title={t("critical_stock")}>
-                      <AlertCircle className="size-3" />
-                    </div>
-                  )}
-                  {p.category && (
-                    <span className="absolute bottom-1 left-1 bg-black/60 text-[7px] text-white px-1 py-0.2 rounded font-medium truncate max-w-[80px]">
-                      {p.category}
-                    </span>
-                  )}
-                </div>
-                <div className="p-1 space-y-0.5">
-                  <div className="font-semibold text-[9px] sm:text-xs truncate leading-tight" title={p.name}>{p.name}</div>
-                  
-                  {/* Custom Attributes Badges */}
-                  {p.attributes && Object.keys(p.attributes).length > 0 && (
-                    <div className="flex flex-wrap gap-0.5 pt-0.5">
-                      {Object.entries(p.attributes).map(([key, val]) => (
-                        <span key={key} className="bg-secondary/70 text-[7px] px-1 py-0.2 rounded text-secondary-foreground truncate max-w-[80px]" title={`${key}: ${val}`}>
-                          {val}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="flex justify-between text-[8px] sm:text-[10px] pt-1">
-                    <span className="text-muted-foreground">{t("sell_price")}</span>
-                    <span className="font-semibold">{p.sell_price > 0 ? fmtMoney(p.sell_price) : "—"}</span>
-                  </div>
-                  <div className="flex justify-between text-[8px] sm:text-[10px]">
-                    <span className="text-muted-foreground">{t("stock")}</span>
-                    <span className={isLowStock ? "text-destructive font-semibold" : ""}>{p.stock}</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="pt-0.5 flex gap-1">
-                {!p.archived ? (
-                  <>
-                    <Button
-                      size="sm"
-                      className="h-6 text-[8px] flex-1 px-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-                      disabled={p.stock <= 0}
-                      onClick={() => {
-                        setSellCart(prev => {
-                          const existing = prev.find(x => x.product.id === p.id);
-                          if (existing) {
-                            return prev.map(x => x.product.id === p.id ? { ...x, qty: Math.min(x.qty + 1, p.stock) } : x);
-                          }
-                          return [...prev, { product: p, qty: 1, sellPrice: p.sell_price || 0 }];
-                        });
-                        toast.success(`${p.name} -> ${t("cart")}`);
-                      }}
-                    >
-                      + {t("sell")}
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="size-6 shrink-0 text-muted-foreground hover:bg-muted">
-                          <MoreVertical className="size-3" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-32">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setSaleProduct(p.id);
-                            setSaleOpen(true);
-                          }}
-                          className="text-xs"
-                          disabled={p.stock <= 0}
-                        >
-                          {t("sell")} (Direct)
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => { setEditing(p); setOpen(true); }} className="text-xs">
-                          <Pencil className="size-3 mr-1.5" /> {t("edit")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => toggleArchive(p)} className="text-xs">
-                          <Archive className="size-3 mr-1.5" /> {t("archive")}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </>
-                ) : (
-                  <>
-                    <Button size="sm" variant="outline" className="h-6 text-[8px] flex-1" onClick={() => toggleArchive(p)}>{t("restore")}</Button>
-                    <Button size="sm" variant="ghost" className="size-6 text-destructive shrink-0" onClick={() => remove(p)}>
-                      <Trash2 className="size-3" />
-                    </Button>
-                  </>
-                )}
-              </div>
-            </Card>
+            <ProductCard
+              key={p.id}
+              p={p}
+              isLowStock={isLowStock}
+              t={t}
+              onSell={() => {
+                setSellCart(prev => {
+                  const existing = prev.find(x => x.product.id === p.id);
+                  if (existing) {
+                    return prev.map(x => x.product.id === p.id ? { ...x, qty: Math.min(x.qty + 1, p.stock) } : x);
+                  }
+                  return [...prev, { product: p, qty: 1, sellPrice: p.sell_price || 0 }];
+                });
+                toast.success(`${p.name} -> ${t("cart")}`);
+              }}
+              onDirectSell={() => {
+                setSaleProduct(p.id);
+                setSaleOpen(true);
+              }}
+              onEdit={() => {
+                setEditing(p);
+                setOpen(true);
+              }}
+              onArchive={() => toggleArchive(p)}
+              onRestore={() => toggleArchive(p)}
+              onDelete={() => remove(p)}
+              onLongPress={() => {
+                setReturnProduct(p);
+                setReturnOpen(true);
+              }}
+            />
           );
         })}
       </div>
@@ -425,6 +364,14 @@ export default function ProductsPage() {
         }
       />
       <PurchaseDialog open={buyOpen} onOpenChange={setBuyOpen} />
+      <ReturnDialog
+        open={returnOpen}
+        onOpenChange={setReturnOpen}
+        product={returnProduct}
+        onSuccess={() => {
+          qc.invalidateQueries({ queryKey: ["products"] });
+        }}
+      />
     </div>
   );
 }
@@ -435,5 +382,245 @@ export function FAB({ onClick }: { onClick: () => void }) {
       className="fixed mobile-fab-bottom right-3 z-20 size-10 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-lg shadow-primary/25 active:scale-95 transition">
       <Plus className="size-4.5" />
     </button>
+  );
+}
+
+function ProductCard({
+  p,
+  isLowStock,
+  onSell,
+  onDirectSell,
+  onEdit,
+  onArchive,
+  onRestore,
+  onDelete,
+  onLongPress,
+  t,
+}: {
+  p: Product;
+  isLowStock: boolean;
+  onSell: () => void;
+  onDirectSell: () => void;
+  onEdit: () => void;
+  onArchive: () => void;
+  onRestore: () => void;
+  onDelete: () => void;
+  onLongPress: () => void;
+  t: (k: string) => string;
+}) {
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleStart = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      onLongPress();
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, 600);
+  };
+
+  const handleEnd = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  return (
+    <Card
+      className={`overflow-hidden border-border/60 flex flex-col justify-between p-1 sm:p-1.5 gap-1 select-none transition-all active:scale-[0.98] ${
+        p.archived ? "opacity-60" : "hover:border-primary/40"
+      }`}
+      onMouseDown={handleStart}
+      onMouseUp={handleEnd}
+      onMouseLeave={handleEnd}
+      onTouchStart={handleStart}
+      onTouchEnd={handleEnd}
+    >
+      <div>
+        <div className="relative rounded overflow-hidden">
+          <ProductImage path={p.image_url} className="w-full aspect-square object-cover" />
+          {!p.archived && isLowStock && (
+            <div className="absolute top-1 right-1 bg-destructive text-destructive-foreground p-0.5 rounded-full shadow" title={t("critical_stock")}>
+              <AlertCircle className="size-3" />
+            </div>
+          )}
+          {p.category && (
+            <span className="absolute bottom-1 left-1 bg-black/60 text-[7px] text-white px-1 py-0.2 rounded font-medium truncate max-w-[80px]">
+              {p.category}
+            </span>
+          )}
+        </div>
+        <div className="p-1 space-y-0.5">
+          <div className="font-semibold text-[9px] sm:text-xs truncate leading-tight" title={p.name}>{p.name}</div>
+          
+          {/* Custom Attributes Badges */}
+          {p.attributes && Object.keys(p.attributes).length > 0 && (
+            <div className="flex flex-wrap gap-0.5 pt-0.5">
+              {Object.entries(p.attributes).map(([key, val]) => (
+                <span key={key} className="bg-secondary/70 text-[7px] px-1 py-0.2 rounded text-secondary-foreground truncate max-w-[80px]" title={`${key}: ${val}`}>
+                  {val}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="flex justify-between text-[8px] sm:text-[10px] pt-1">
+            <span className="text-muted-foreground">{t("sell_price")}</span>
+            <span className="font-semibold">{p.sell_price > 0 ? fmtMoney(p.sell_price) : "—"}</span>
+          </div>
+          <div className="flex justify-between text-[8px] sm:text-[10px]">
+            <span className="text-muted-foreground">{t("stock")}</span>
+            <span className={isLowStock ? "text-destructive font-semibold" : ""}>{p.stock}</span>
+          </div>
+        </div>
+      </div>
+      
+      <div className="pt-0.5 flex gap-1" onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
+        {!p.archived ? (
+          <>
+            <Button
+              size="sm"
+              className="h-6 text-[8px] flex-1 px-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+              disabled={p.stock <= 0}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSell();
+              }}
+            >
+              + {t("sell")}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="size-6 shrink-0 text-muted-foreground hover:bg-muted">
+                  <MoreVertical className="size-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-32">
+                <DropdownMenuItem
+                  onClick={() => onDirectSell()}
+                  className="text-xs"
+                  disabled={p.stock <= 0}
+                >
+                  {t("sell")} (Direct)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onEdit()} className="text-xs">
+                  <Pencil className="size-3 mr-1.5" /> {t("edit")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onArchive()} className="text-xs">
+                  <Archive className="size-3 mr-1.5" /> {t("archive")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        ) : (
+          <>
+            <Button size="sm" variant="outline" className="h-6 text-[8px] flex-1" onClick={() => onRestore()}>{t("restore")}</Button>
+            <Button size="sm" variant="ghost" className="size-6 text-destructive shrink-0" onClick={() => onDelete()}>
+              <Trash2 className="size-3" />
+            </Button>
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function ReturnDialog({
+  open,
+  onOpenChange,
+  product,
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  product: Product | null;
+  onSuccess: () => void;
+}) {
+  const { t } = useT();
+  const [qty, setQty] = useState("1");
+  const [price, setPrice] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (product) {
+      setQty("1");
+      setPrice(String(product.sell_price || ""));
+      setNote("");
+    }
+  }, [product, open]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!product) return;
+    setBusy(true);
+    try {
+      await createDirectProductReturnFn({
+        data: {
+          product_id: product.id,
+          qty: Number(qty) || 0,
+          return_price: Number(price) || 0,
+          note: note.trim() || null,
+        },
+      });
+      toast.success("Product returned successfully");
+      onSuccess();
+      onOpenChange(false);
+    } catch (err: any) {
+      toast.error(err.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Return Product: {product?.name}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Quantity to Return</Label>
+            <Input
+              type="number"
+              min="1"
+              required
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Return Price / Old Selling Price (per unit)</Label>
+            <Input
+              type="number"
+              min="0"
+              step="any"
+              required
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Note / Reason</Label>
+            <Input
+              placeholder="e.g. Damaged item / size issue"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+          <DialogFooter className="gap-2 pt-2 border-t">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              {t("cancel")}
+            </Button>
+            <Button type="submit" disabled={busy} className="bg-destructive hover:bg-destructive/90 text-white font-medium">
+              {busy ? "..." : "Confirm Return"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

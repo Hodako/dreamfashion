@@ -115,6 +115,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      if (
+        active &&
+        (active.tagName === "INPUT" ||
+          active.tagName === "TEXTAREA" ||
+          active.tagName === "SELECT" ||
+          active.contentEditable === "true")
+      ) {
+        return;
+      }
+      
+      const key = e.key.toLowerCase();
+      if (key === "i") {
+        e.preventDefault();
+        router.push("/invoices");
+      } else if (key === "p") {
+        e.preventDefault();
+        router.push("/products");
+      } else if (key === "s") {
+        e.preventDefault();
+        router.push("/sales");
+      } else if (key === "c") {
+        e.preventDefault();
+        router.push("/cash-management");
+      } else if (key === "d") {
+        e.preventDefault();
+        router.push("/dashboard");
+      }
+    };
+    
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [router]);
+
   if (loading && !user) return <SpeedLoader />;
   if (!user) return null;
 
@@ -122,9 +158,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isEmployee = user.role === "employee";
   const sidebarGroups = filterGroups(desktopNavGroups, perms).map(group => ({
     ...group,
-    items: group.items.filter(item => !(isEmployee && item.to === "/somiti"))
+    items: group.items.filter(item => !(isEmployee && (item.to === "/somiti" || item.to === "/parties")))
   })).filter(group => group.items.length > 0);
-  const bottomNav = filterNav(mobileNav, perms).filter(item => !(isEmployee && item.to === "/somiti"));
+  const bottomNav = filterNav(mobileNav, perms).filter(item => !(isEmployee && (item.to === "/somiti" || item.to === "/parties")));
   const brandName = user.business_name || "HakimEzy";
   const userInitials = user.email?.slice(0, 2).toUpperCase() ?? "HZ";
 

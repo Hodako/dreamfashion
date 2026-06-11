@@ -113,7 +113,7 @@ export function UniversalSearch({ role, permissions }: UniversalSearchProps) {
         </Button>
 
         {mobileExpanded && (
-          <div className="fixed inset-x-0 top-0 h-12 bg-card border-b border-border/80 flex items-center px-3 gap-2 z-50 animate-in slide-in-from-top duration-200">
+          <div className="fixed inset-x-0 top-0 h-12 bg-background border-b border-border flex items-center px-3 gap-2 z-[999] animate-in slide-in-from-top duration-200">
             <Button
               variant="ghost"
               size="icon"
@@ -134,7 +134,7 @@ export function UniversalSearch({ role, permissions }: UniversalSearchProps) {
             />
 
             {/* Results absolute container */}
-            <div className="absolute top-12 inset-x-0 max-h-[calc(100vh-3rem)] overflow-y-auto bg-card/95 backdrop-blur-md border-b border-border shadow-xl z-50 p-2 space-y-3 pb-8">
+            <div className="absolute top-12 inset-x-0 max-h-[calc(100vh-3rem)] overflow-y-auto bg-background border-b border-border shadow-2xl z-[999] p-2 space-y-3 pb-8">
               {filtered.pages.length === 0 && filtered.products.length === 0 && filtered.parties.length === 0 && filtered.sales.length === 0 && (
                 <div className="text-center py-6 text-xs text-muted-foreground">{t("no_results")}</div>
               )}

@@ -129,9 +129,9 @@ export default function PartiesPage() {
         </div>
       </Card>
 
-      <div className="sticky top-0 z-10 bg-background border-b pb-2 pt-3">
-        <div className="relative pl-4 pr-4">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+      <div className="sticky top-0 z-10 bg-background border-b pb-2 pt-3 px-4">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground z-10" />
           <Input
             className="pl-9"
             placeholder={t("search_parties")}

@@ -214,6 +214,10 @@ export async function getBusinessSettingsFn() {
       business_type: (business.business_type as string) || "retail",
       theme: (business.theme as string) || "green",
       employee_limit: (business.employee_limit as number) || 5,
+      invoice_watermark: (business.invoice_watermark as string) || "",
+      invoice_watermark_enabled: Boolean(business.invoice_watermark_enabled),
+      invoice_terms: (business.invoice_terms as string) || "",
+      invoice_color: (business.invoice_color as string) || "black",
     } : null,
     role: session.role,
     permissions: session.permissions,
@@ -240,6 +244,10 @@ export async function updateBusinessSettingsFn(input: {
     business_type?: string;
     theme?: string;
     employee_limit?: number;
+    invoice_watermark?: string;
+    invoice_watermark_enabled?: boolean;
+    invoice_terms?: string;
+    invoice_color?: string;
   }
 }) {
   const { data } = input;
