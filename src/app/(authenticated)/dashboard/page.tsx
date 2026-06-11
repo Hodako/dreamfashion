@@ -158,10 +158,10 @@ export default function Dashboard() {
     const d = new Date(s.created_at);
     const showToday = !dateFilter.from && !dateFilter.to;
     const fromOk = showToday
-      ? d >= tod
+      ? d >= today
       : !dateFilter.from || d >= new Date(dateFilter.from);
     const toOk = showToday
-      ? d < tom
+      ? d < tomorrow
       : !dateFilter.to || d <= new Date(dateFilter.to);
     return fromOk && toOk;
   });
@@ -169,10 +169,10 @@ export default function Dashboard() {
     const d = new Date(e.created_at);
     const showToday = !dateFilter.from && !dateFilter.to;
     const fromOk = showToday
-      ? d >= tod
+      ? d >= today
       : !dateFilter.from || d >= new Date(dateFilter.from);
     const toOk = showToday
-      ? d < tom
+      ? d < tomorrow
       : !dateFilter.to || d <= new Date(dateFilter.to);
     return fromOk && toOk;
   });
@@ -180,10 +180,10 @@ export default function Dashboard() {
     const d = new Date(w.created_at);
     const showToday = !dateFilter.from && !dateFilter.to;
     const fromOk = showToday
-      ? d >= tod
+      ? d >= today
       : !dateFilter.from || d >= new Date(dateFilter.from);
     const toOk = showToday
-      ? d < tom
+      ? d < tomorrow
       : !dateFilter.to || d <= new Date(dateFilter.to);
     return fromOk && toOk;
   });
@@ -191,15 +191,17 @@ export default function Dashboard() {
     const d = new Date(c.created_at);
     const showToday = !dateFilter.from && !dateFilter.to;
     const fromOk = showToday
-      ? d >= tod
+      ? d >= today
       : !dateFilter.from || d >= new Date(dateFilter.from);
     const toOk = showToday
-      ? d < tom
+      ? d < tomorrow
       : !dateFilter.to || d <= new Date(dateFilter.to);
     return fromOk && toOk;
   });
 
   const today   = todayStart();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
   const week    = startOf(7);
   const month   = startOf(30);
 
