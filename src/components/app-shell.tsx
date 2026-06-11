@@ -15,7 +15,7 @@ import { useT } from "@/lib/i18n";
 import { useAuth } from "@/hooks/use-auth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AppLogo } from "@/components/app-logo";
 import { SpeedLoader } from "@/components/speed-loader";
 import { UniversalSearch } from "@/components/universal-search";
@@ -218,6 +218,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <DropdownMenuTrigger asChild>
                     <SidebarMenuButton size="lg" tooltip={user.email ?? "Account"}>
                       <Avatar className="size-6 shrink-0">
+                        <AvatarImage src="https://png.pngtree.com/png-vector/20231019/ourmid/pngtree-user-profile-avatar-png-image_10211467.png" alt="Profile" />
                         <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">{userInitials}</AvatarFallback>
                       </Avatar>
                       <span className="truncate text-sm">{user.email}</span>
@@ -283,6 +284,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="size-8">
                     <Avatar className="size-5">
+                      <AvatarImage src="https://png.pngtree.com/png-vector/20231019/ourmid/pngtree-user-profile-avatar-png-image_10211467.png" alt="Profile" />
                       <AvatarFallback className="text-[9px] bg-primary text-primary-foreground">{userInitials}</AvatarFallback>
                     </Avatar>
                   </Button>

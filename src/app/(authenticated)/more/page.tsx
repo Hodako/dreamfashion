@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { canAccess, resolvePermissions } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const businessLinks = [
   { to: "/invoices",       labelKey: "invoice_generator", desc: "Create & customize invoices", icon: FileText,     perm: "sales"      as const },
@@ -43,9 +44,10 @@ export default function MorePage() {
       {/* Redesigned Profile Header */}
       <Card className="p-4 bg-gradient-to-br from-primary/10 via-indigo-500/5 to-background border-primary/20 beveled-card">
         <div className="flex items-center gap-4">
-          <div className="size-14 rounded-full bg-gradient-to-br from-primary to-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-md border-2 border-background">
-            {initials}
-          </div>
+          <Avatar className="size-14 border-2 border-background shadow-md shrink-0">
+            <AvatarImage src="https://png.pngtree.com/png-vector/20231019/ourmid/pngtree-user-profile-avatar-png-image_10211467.png" alt="Profile" />
+            <AvatarFallback className="bg-gradient-to-br from-primary to-indigo-600 text-white font-bold text-lg">{initials}</AvatarFallback>
+          </Avatar>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-bold text-base text-zinc-950 dark:text-zinc-50 truncate">{user?.full_name || "User"}</h2>

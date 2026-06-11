@@ -208,7 +208,12 @@
 }
 
 .mobile-tab-bar {
+  background-color: oklch(1 0 0) !important;
   box-shadow: 0 -4px 24px oklch(0.38 0.12 155 / 0.08);
+}
+
+.dark .mobile-tab-bar {
+  background-color: oklch(0.22 0.05 155) !important;
 }
 
 @media (max-width: 767px) {
