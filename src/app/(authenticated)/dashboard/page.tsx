@@ -650,14 +650,15 @@ export default function Dashboard() {
           {!collapsed.kpis && (
             <div className="space-y-2.5">
               <div className="grid grid-cols-2 gap-2">
-                <KPICard
-                  label={t("profit")}
-                  value={fmtMoney(profitToday)}
-                  sub={t("today")}
-                  imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
-                  color="bg-emerald-500"
-                  onClick={handleProfitClick}
-                />
+                <Link href="/profits" className="block">
+                  <KPICard
+                    label={t("profit")}
+                    value={fmtMoney(profitToday)}
+                    sub={t("today")}
+                    imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
+                    color="bg-emerald-500"
+                  />
+                </Link>
                 <KPICard
                   label={t("cash_sale")}
                   value={fmtMoney(cashToday)}
@@ -681,7 +682,9 @@ export default function Dashboard() {
                   }}
                 />
                 {canAccess(perms, "expenses") && (
-                  <KPICard label={t("expense")} value={fmtMoney(expenseToday)} sub={t("today")} icon={Receipt} color="bg-rose-500" />
+                  <Link href="/expenses" className="block">
+                    <KPICard label={t("expense")} value={fmtMoney(expenseToday)} sub={t("today")} icon={Receipt} color="bg-rose-500" />
+                  </Link>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-2 border-t border-border/50 pt-2.5">
@@ -703,7 +706,7 @@ export default function Dashboard() {
                   />
                 )}
                 {canAccess(perms, "parties") && (
-                  <Link href="/parties" className="block">
+                  <Link href="/dues" className="block">
                     <KPICard label={t("due")} value={fmtMoney(totalDues)} imageUrl="https://img.icons8.com/color/48/loan.png" color="bg-amber-600" trendUp={false} />
                   </Link>
                 )}
@@ -995,15 +998,16 @@ export default function Dashboard() {
 
       {/* Row 1: KPI Cards */}
       <div className="grid grid-cols-5 gap-4">
-        <KPICard
-          label={t("profit")}
-          value={fmtMoney(profitToday)}
-          sub={t("today")}
-          imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
-          color="bg-emerald-500"
-          trendUp
-          onClick={handleProfitClick}
-        />
+        <Link href="/profits" className="block">
+          <KPICard
+            label={t("profit")}
+            value={fmtMoney(profitToday)}
+            sub={t("today")}
+            imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
+            color="bg-emerald-500"
+            trendUp
+          />
+        </Link>
         {canAccess(perms, "expenses") ? (
           <Link href="/cash-management/cashbox" className="block">
             <KPICard label={t("cashbox")} value={fmtMoney(cashboxTotal)} imageUrl="https://img.icons8.com/plasticine/100/cash--v1.png" color="bg-indigo-500" trendUp={cashboxTotal >= 0} trend={t("balance")} />
@@ -1047,7 +1051,7 @@ export default function Dashboard() {
           }}
         />
         {canAccess(perms, "parties") && (
-          <Link href="/parties" className="block">
+          <Link href="/dues" className="block">
             <KPICard label={t("due")} value={fmtMoney(totalDues)} imageUrl="https://img.icons8.com/color/48/loan.png" color="bg-amber-500" trendUp={false} trend="Outstanding" />
           </Link>
         )}
@@ -1068,7 +1072,9 @@ export default function Dashboard() {
           }}
         />
         {canAccess(perms, "expenses") && (
-          <KPICard label={t("expense")} value={fmtMoney(expenseToday)} sub={t("today")} icon={Receipt} color="bg-orange-500" trendUp={false} />
+          <Link href="/expenses" className="block">
+            <KPICard label={t("expense")} value={fmtMoney(expenseToday)} sub={t("today")} icon={Receipt} color="bg-orange-500" trendUp={false} />
+          </Link>
         )}
         <KPICard label={t("inventory_val_cost")} value={fmtMoney(totalStockCostValuation)} sub={lang === "bn" ? "কেনা মূল্যের হিসাব" : "Cost Worth of Stock"} imageUrl="https://img.icons8.com/bubbles/100/buy.png" color="bg-teal-500" />
         <KPICard label={t("inventory_val_sale")} value={fmtMoney(totalStockSaleValuation)} sub={lang === "bn" ? "বিক্রি মূল্যের হিসাব" : "Selling Worth of Stock"} icon={Package} color="bg-pink-500" />
