@@ -9,7 +9,7 @@ import {
   Trash2, Plus, Calendar, BarChart3, LineChart as LineChartIcon, AreaChart as AreaChartIcon, CheckSquare, Square
 } from "lucide-react";
 import { useT } from "@/lib/i18n";
-import { getExpenses, getSales, getWithdrawals, getProducts, getParties, getCashbox, getReminders } from "@/lib/queries";
+import { getExpenses, getSales, getWithdrawals, getProducts, getParties, getCashbox, getReminders, getAllPayments, getAllPartyReceivables, getAllPartyPayables, getAllPayableSettlements } from "@/lib/queries";
 import type { Reminder } from "@/lib/queries";
 import { cashboxBalance } from "@/lib/cashbox-utils";
 import { fmtMoney, fmtDateTime } from "@/lib/format";
@@ -159,6 +159,10 @@ export default function Dashboard() {
   const cashbox = useCachedQuery(["cashbox"], getCashbox);
   const products = useCachedQuery(["products"], getProducts);
   const parties = useCachedQuery(["parties"], getParties);
+  const allPayments = useCachedQuery(["all-payments"], getAllPayments);
+  const allReceivables = useCachedQuery(["all-party-receivables"], getAllPartyReceivables);
+  const allPayables = useCachedQuery(["all-party-payables"], getAllPartyPayables);
+  const allSettlements = useCachedQuery(["all-payable-settlements"], getAllPayableSettlements);
   const { data: reminders = [] } = useCachedQuery(["reminders"], getReminders);
 
   const allSales      = sales.data ?? [];
@@ -166,6 +170,13 @@ export default function Dashboard() {
   const allWithdrawals = withdrawals.data ?? [];
   const allCashbox    = cashbox.data ?? [];
   const allParties    = parties.data ?? [];
+
+  const getPartyOutstanding = (partyId: string) => {
+    const saleDues = allSales.filter(s => s.party_id === partyId && !s.returned).reduce((sum, s) => sum + (Number(s.due_amount) || 0), 0);
+    const manualDues = (allReceivables.data ?? []).filter(r => r.party_id === partyId).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const payments = (allPayments.data ?? []).filter(p => p.party_id === partyId).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    return Math.max((saleDues + manualDues) - payments, 0);
+  };
 
   const [dateFilter, setDateFilter] = useState<{ from: string; to: string }>({ from: '', to: '' });
   const [showFilter, setShowFilter] = useState(false);
@@ -201,6 +212,41 @@ export default function Dashboard() {
     recent: false,
     pie: false,
   });
+
+  // Widget ordering state
+  const [widgetOrder, setWidgetOrder] = useState<string[]>([
+    'kpis', 'valuations', 'graphs', 'reminders', 'quickLinks', 'bestSelling', 'recent'
+  ]);
+
+  const loadWidgetOrder = () => {
+    if (typeof window === "undefined") return;
+    const saved = localStorage.getItem("hz_dashboard_widget_order");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setWidgetOrder(parsed);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    } else {
+      setWidgetOrder(['kpis', 'valuations', 'graphs', 'reminders', 'quickLinks', 'bestSelling', 'recent']);
+    }
+  };
+
+  useEffect(() => {
+    loadWidgetOrder();
+    
+    const handleOrderUpdate = () => {
+      loadWidgetOrder();
+    };
+
+    window.addEventListener("hz-dashboard-order-updated", handleOrderUpdate);
+    return () => {
+      window.removeEventListener("hz-dashboard-order-updated", handleOrderUpdate);
+    };
+  }, []);
 
   const handleProfitClick = () => {
     setChartMetric("profit");
@@ -284,7 +330,11 @@ export default function Dashboard() {
   // profit today
   const profitToday  = filteredSales.filter(s => new Date(s.created_at) >= today).reduce((a, s) => a + Number(s.profit), 0);
   
-  const totalDues    = filteredSales.reduce((a, s) => a + Number(s.due_amount), 0);
+  const totalDues = allParties.reduce((sum, p) => {
+    if (p.archived) return sum;
+    return sum + getPartyOutstanding(p.id);
+  }, 0);
+
   const expenseToday = filteredExpenses.filter(e => new Date(e.created_at) >= today).reduce((a, e) => a + Number(e.amount), 0);
   const cashboxTotal = cashboxBalance(filteredCashbox);
 
@@ -329,10 +379,11 @@ export default function Dashboard() {
     return sortedRecentSales.slice(0, activityLimit);
   }, [sortedRecentSales, activityLimit]);
 
+
   // Due alerts calculation
   const dueAlertParties = allParties.map(p => {
-    const rawSales = allSales.filter(s => s.party_id === p.id).reduce((sum, s) => sum + Number(s.due_amount), 0);
-    return { ...p, outstanding: rawSales };
+    const outstanding = getPartyOutstanding(p.id);
+    return { ...p, outstanding };
   }).filter(p => p.outstanding > 0).slice(0, 4);
 
   // ── Smart Logic Reminders calculations ──────────────────────────────
@@ -351,8 +402,8 @@ export default function Dashboard() {
       const party = allParties.find(p => p.id === r.logic_config?.party_id);
       const maxDue = r.logic_config?.max_due ?? 1000;
       if (party) {
-        const rawSales = allSales.filter(s => s.party_id === party.id).reduce((sum, s) => sum + Number(s.due_amount), 0);
-        return rawSales >= maxDue;
+        const outstanding = getPartyOutstanding(party.id);
+        return outstanding >= maxDue;
       }
       return false;
     }
@@ -392,13 +443,13 @@ export default function Dashboard() {
         const maxDue = r.logic_config?.max_due ?? 1000;
         
         if (party) {
-          const rawSales = allSales.filter(s => s.party_id === party.id).reduce((sum, s) => sum + Number(s.due_amount), 0);
-          if (rawSales >= maxDue) {
+          const outstanding = getPartyOutstanding(party.id);
+          if (outstanding >= maxDue) {
             list.push({
               id: r.id,
               title: lang === "bn"
-                ? `${r.title}: ${party.name} এর বকেয়া ${fmtMoney(rawSales)} টাকা (বকেয়া সীমা: ${fmtMoney(maxDue)})`
-                : `${r.title}: ${party.name} owes ${fmtMoney(rawSales)} (Dues limit: ${fmtMoney(maxDue)})`,
+                ? `${r.title}: ${party.name} এর বকেয়া ${fmtMoney(outstanding)} টাকা (বকেয়া সীমা: ${fmtMoney(maxDue)})`
+                : `${r.title}: ${party.name} owes ${fmtMoney(outstanding)} (Dues limit: ${fmtMoney(maxDue)})`,
               type: lang === "bn" ? "পার্টির বকেয়া সতর্কতা" : "Customer Dues Alarm",
               isLogic: true
             });
@@ -599,6 +650,562 @@ export default function Dashboard() {
     );
   }
 
+  const renderWidget = (widgetId: string) => {
+    switch (widgetId) {
+      case "kpis":
+        return (
+          <Card key="kpis" className="p-3 border border-border space-y-3 bg-card/65 backdrop-blur-sm beveled-card">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("key_metrics")}</span>
+              <Button variant="ghost" size="icon" className="size-7" onClick={() => setCollapsed(prev => ({ ...prev, kpis: !prev.kpis }))}>
+                {collapsed.kpis ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
+              </Button>
+            </div>
+
+            {!collapsed.kpis && (
+              <div className="space-y-2.5">
+                <div className="grid grid-cols-2 gap-2">
+                  <Link href="/profits" className="block">
+                    <KPICard
+                      label={t("profit")}
+                      value={fmtMoney(profitToday)}
+                      sub={t("today")}
+                      imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
+                      color="bg-emerald-500"
+                    />
+                  </Link>
+                  <KPICard
+                    label={t("cash_sale")}
+                    value={fmtMoney(cashToday)}
+                    sub={t("today")}
+                    imageUrl="https://img.icons8.com/fluency/48/sell.png"
+                    color="bg-indigo-500"
+                    onClick={() => {
+                      setSalePresetType("cash");
+                      setSaleOpen(true);
+                    }}
+                  />
+                  <KPICard
+                    label={t("credit_sale")}
+                    value={fmtMoney(creditToday)}
+                    sub={t("today")}
+                    imageUrl="https://img.icons8.com/fluency/48/sell.png"
+                    color="bg-amber-500"
+                    onClick={() => {
+                      setSalePresetType("credit");
+                      setSaleOpen(true);
+                    }}
+                  />
+                  {canAccess(perms, "expenses") && (
+                    <Link href="/expenses" className="block">
+                      <KPICard label={t("expense")} value={fmtMoney(expenseToday)} sub={t("today")} imageUrl="https://img.icons8.com/color/48/tax.png" color="bg-rose-500" />
+                    </Link>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 border-t border-border/50 pt-2.5">
+                  {canAccess(perms, "expenses") ? (
+                    <Link href="/cash-management/cashbox" className="block">
+                      <KPICard label={t("cashbox")} value={fmtMoney(cashboxTotal)} imageUrl="https://img.icons8.com/plasticine/100/cash--v1.png" color="bg-indigo-600" trendUp={cashboxTotal >= 0} trend={t("balance")} />
+                    </Link>
+                  ) : (
+                    <KPICard
+                      label={t("cash_sale")}
+                      value={fmtMoney(cashToday)}
+                      sub={t("today")}
+                      imageUrl="https://img.icons8.com/fluency/48/sell.png"
+                      color="bg-indigo-600"
+                      onClick={() => {
+                        setSalePresetType("cash");
+                        setSaleOpen(true);
+                      }}
+                    />
+                  )}
+                  {canAccess(perms, "parties") && (
+                    <Link href="/dues" className="block">
+                      <KPICard label={t("due")} value={fmtMoney(totalDues)} imageUrl="https://img.icons8.com/color/48/loan.png" color="bg-amber-600" trendUp={false} />
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
+          </Card>
+        );
+
+      case "valuations":
+        return (
+          <Card key="valuations" className="p-3 border border-border space-y-2 bg-card/65 backdrop-blur-sm beveled-card">
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{lang === "bn" ? "পণ্য স্টক মূল্য (ইনভেন্টরি)" : "Stock & Inventory Valuation"}</div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2 bg-secondary/50 rounded-lg flex items-center justify-between gap-1.5">
+                <div className="min-w-0">
+                  <div className="text-[9px] text-muted-foreground">{t("inventory_val_cost")}</div>
+                  <div className="font-bold text-sm mt-0.5">{fmtMoney(totalStockCostValuation)}</div>
+                </div>
+                <img src="https://img.icons8.com/bubbles/100/buy.png" className="size-8 object-contain shrink-0" alt="buy" />
+              </div>
+              <div className="p-2 bg-secondary/50 rounded-lg flex items-center justify-between gap-1.5">
+                <div className="min-w-0">
+                  <div className="text-[9px] text-muted-foreground">{t("inventory_val_sale")}</div>
+                  <div className="font-bold text-sm mt-0.5">{fmtMoney(totalStockSaleValuation)}</div>
+                </div>
+                <Package className="size-5 text-muted-foreground shrink-0" />
+              </div>
+            </div>
+          </Card>
+        );
+
+      case "graphs":
+        return (
+          <Card key="graphs" id="analytics-chart-mobile" className="p-3 space-y-3 bg-card/65 backdrop-blur-sm beveled-card">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("custom_graphs")}</span>
+              <Button variant="ghost" size="icon" className="size-7" onClick={() => setCollapsed(prev => ({ ...prev, graphs: !prev.graphs }))}>
+                {collapsed.graphs ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
+              </Button>
+            </div>
+
+            {!collapsed.graphs && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px]">
+                  <div className="flex bg-muted rounded p-0.5">
+                    <button onClick={() => setChartMetric("sales")} className={`px-2 py-0.5 rounded ${chartMetric === "sales" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "বিক্রি" : "Sales"}</button>
+                    <button onClick={() => setChartMetric("profit")} className={`px-2 py-0.5 rounded ${chartMetric === "profit" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "লাভ" : "Profit"}</button>
+                    <button onClick={() => setChartMetric("expenses")} className={`px-2 py-0.5 rounded ${chartMetric === "expenses" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "খরচ" : "Expenses"}</button>
+                  </div>
+                  <div className="flex bg-muted rounded p-0.5">
+                    <button onClick={() => setChartType("area")} className={`p-1 rounded ${chartType === "area" ? "bg-background shadow" : ""}`} title="Area Chart"><AreaChartIcon className="size-3" /></button>
+                    <button onClick={() => setChartType("bar")} className={`p-1 rounded ${chartType === "bar" ? "bg-background shadow" : ""}`} title="Bar Chart"><BarChart3 className="size-3" /></button>
+                    <button onClick={() => setChartType("line")} className={`p-1 rounded ${chartType === "line" ? "bg-background shadow" : ""}`} title="Line Chart"><LineChartIcon className="size-3" /></button>
+                  </div>
+                  <div className="flex bg-muted rounded p-0.5">
+                    <button onClick={() => setChartRange(7)} className={`px-1.5 py-0.5 rounded ${chartRange === 7 ? "bg-background shadow" : ""}`}>7d</button>
+                    <button onClick={() => setChartRange(14)} className={`px-1.5 py-0.5 rounded ${chartRange === 14 ? "bg-background shadow" : ""}`}>14d</button>
+                    <button onClick={() => setChartRange(30)} className={`px-1.5 py-0.5 rounded ${chartRange === 30 ? "bg-background shadow" : ""}`}>30d</button>
+                  </div>
+                </div>
+
+                <ResponsiveContainer width="100%" height={150}>
+                  <ChartComponent data={customGraphData}>
+                    <defs>
+                      <linearGradient id="gSales" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="gProfit" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="gExpense" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="date" tick={{ fontSize: 8 }} />
+                    <YAxis tick={{ fontSize: 8 }} tickFormatter={v => `৳${v}`} width={40} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <ChartDataElement type="monotone" dataKey={chartMetric} stroke={getMetricColor()} fill={chartType === "area" ? (chartMetric === "profit" ? "url(#gProfit)" : chartMetric === "expenses" ? "url(#gExpense)" : "url(#gSales)") : undefined} strokeWidth={2} name={t(chartMetric)} />
+                  </ChartComponent>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </Card>
+        );
+
+      case "reminders":
+        return (
+          <Card key="reminders" className="p-3 space-y-3 bg-card/65 backdrop-blur-sm beveled-card">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("reminders")}</span>
+              <Button variant="ghost" size="icon" className="size-7" onClick={() => setCollapsed(prev => ({ ...prev, reminders: !prev.reminders }))}>
+                {collapsed.reminders ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
+              </Button>
+            </div>
+
+            {!collapsed.reminders && (
+              <div className="space-y-3">
+                {renderReminderForm()}
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pt-2">
+                  {reminders.length === 0 && <p className="text-[10px] text-muted-foreground italic text-center py-2">No custom tasks</p>}
+                  {reminders.map(r => (
+                    <div key={r.id} className={`flex items-center justify-between p-2 border rounded text-xs transition-colors ${
+                      isReminderActive(r) ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-border"
+                    }`}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        {(!r.logic_type || r.logic_type === "none") ? (
+                          <button type="button" onClick={() => handleToggleReminder(r.id, !r.completed)}>
+                            {r.completed ? <CheckSquare className="size-4 text-primary shrink-0" /> : <Square className="size-4 text-muted-foreground shrink-0" />}
+                          </button>
+                        ) : (
+                          <span className="inline-block text-[8px] font-bold px-1 py-0.2 rounded bg-primary/15 text-primary uppercase shrink-0">
+                            {lang === "bn" ? "অটো" : "Auto"}
+                          </span>
+                        )}
+                        <span className={`truncate ${r.completed ? "line-through text-muted-foreground" : "font-medium"}`}>{r.title}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 text-muted-foreground text-[10px]">
+                        <span>{r.due_date}</span>
+                        <button type="button" className="text-destructive hover:scale-105 active:scale-95" onClick={() => handleDeleteReminder(r.id)}><Trash2 className="size-3.5" /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
+        );
+
+      case "quickLinks":
+        return (
+          <div key="quickLinks" className="grid grid-cols-3 gap-2">
+            {[
+              { to: "/products", icon: Package, label: t("products"), perm: "products" as const },
+              { to: "/sales", icon: ShoppingBag, label: t("sales"), perm: "sales" as const },
+              { to: "/parties", icon: Users, label: t("parties"), perm: "parties" as const },
+            ].filter(item => canAccess(perms, item.perm)).map(({ to, icon: Icon, label }) => (
+              <Link key={to} href={to} className="flex flex-col items-center gap-1 p-2 rounded-xl border border-border bg-card hover:bg-accent transition-colors">
+                <Icon className="size-4 text-primary" />
+                <span className="text-[10px] font-medium text-center">{label}</span>
+              </Link>
+            ))}
+          </div>
+        );
+
+      case "bestSelling":
+        return topDemandedProducts.length > 0 ? (
+          <Card key="bestSelling" className="p-3 bg-card/65 backdrop-blur-sm beveled-card">
+            <h2 className="text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground">{t("best_selling")} ({t("qty")})</h2>
+            <div className="space-y-1.5">
+              {topDemandedProducts.map((p, i) => (
+                <div key={p.name} className="flex justify-between items-center text-xs p-1 px-2 bg-secondary/40 rounded">
+                  <span className="truncate">{i+1}. {p.name}</span>
+                  <span className="font-bold">{p.value} units</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : null;
+
+      case "recent":
+        return (
+          <div key="recent" className="space-y-2">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("recent_activity")}</h2>
+              <Button variant="ghost" size="icon" className="size-7" onClick={() => setCollapsed(prev => ({ ...prev, recent: !prev.recent }))}>
+                {collapsed.recent ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
+              </Button>
+            </div>
+            {!collapsed.recent && (
+              <div className="space-y-2">
+                <Card className="divide-y divide-border overflow-hidden">
+                  {recentSalesToShow.length === 0 && <div className="p-4 text-center text-xs text-muted-foreground">{t("no_activity")}</div>}
+                  {recentSalesToShow.map(s => (
+                    <div key={s.id} className="p-2.5 flex items-center justify-between gap-3 text-xs">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{s.product_name}</div>
+                        <div className="text-[10px] text-muted-foreground">{s.type === "cash" ? t("cash") : s.type === "online" ? t("online_sell") : t("credit")} · {fmtDateTime(s.created_at)}</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-semibold">{fmtMoney(Number(s.sell_price) * s.qty)}</div>
+                        <div className="text-[10px] text-emerald-600">+{fmtMoney(s.profit)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </Card>
+                {sortedRecentSales.length > recentSalesToShow.length && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-xs h-8 hover:bg-accent border border-dashed border-border/60"
+                    onClick={() => setActivityLimit(prev => prev + 5)}
+                  >
+                    {lang === "bn" ? "আরও লোড করুন ↓" : "Load More ↓"}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  const renderDesktopWidget = (widgetId: string) => {
+    switch (widgetId) {
+      case "kpis":
+        return (
+          <div key="kpis" className="space-y-6 col-span-3">
+            <div className="grid grid-cols-5 gap-4">
+              <Link href="/profits" className="block">
+                <KPICard
+                  label={t("profit")}
+                  value={fmtMoney(profitToday)}
+                  sub={t("today")}
+                  imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
+                  color="bg-emerald-500"
+                  trendUp
+                />
+              </Link>
+              {canAccess(perms, "expenses") ? (
+                <Link href="/cash-management/cashbox" className="block">
+                  <KPICard label={t("cashbox")} value={fmtMoney(cashboxTotal)} imageUrl="https://img.icons8.com/plasticine/100/cash--v1.png" color="bg-indigo-500" trendUp={cashboxTotal >= 0} trend={t("balance")} />
+                </Link>
+              ) : (
+                <KPICard
+                  label={t("cash_sale")}
+                  value={fmtMoney(cashToday)}
+                  sub={t("today")}
+                  imageUrl="https://img.icons8.com/fluency/48/sell.png"
+                  color="bg-indigo-500"
+                  trendUp
+                  onClick={() => {
+                    setSalePresetType("cash");
+                    setSaleOpen(true);
+                  }}
+                />
+              )}
+              <KPICard
+                label={t("cash_sale")}
+                value={fmtMoney(cashToday)}
+                sub={t("today")}
+                imageUrl="https://img.icons8.com/fluency/48/sell.png"
+                color="bg-indigo-600"
+                trendUp
+                onClick={() => {
+                  setSalePresetType("cash");
+                  setSaleOpen(true);
+                }}
+              />
+              <KPICard
+                label={t("online_sell")}
+                value={fmtMoney(onlineToday)}
+                sub={t("today")}
+                imageUrl="https://img.icons8.com/fluency/48/sell.png"
+                color="bg-sky-500"
+                trendUp
+                onClick={() => {
+                  setSalePresetType("online");
+                  setSaleOpen(true);
+                }}
+              />
+              {canAccess(perms, "parties") && (
+                <Link href="/dues" className="block">
+                  <KPICard label={t("due")} value={fmtMoney(totalDues)} imageUrl="https://img.icons8.com/color/48/loan.png" color="bg-amber-500" trendUp={false} trend="Outstanding" />
+                </Link>
+              )}
+            </div>
+
+            <div className="grid grid-cols-4 gap-4">
+              <KPICard
+                label={t("credit_sale")}
+                value={fmtMoney(creditToday)}
+                sub={t("today")}
+                imageUrl="https://img.icons8.com/fluency/48/sell.png"
+                color="bg-rose-500"
+                trendUp={false}
+                onClick={() => {
+                  setSalePresetType("credit");
+                  setSaleOpen(true);
+                }}
+              />
+              {canAccess(perms, "expenses") && (
+                <Link href="/expenses" className="block">
+                  <KPICard label={t("expense")} value={fmtMoney(expenseToday)} sub={t("today")} imageUrl="https://img.icons8.com/color/48/tax.png" color="bg-orange-500" trendUp={false} />
+                </Link>
+              )}
+              <KPICard label={t("inventory_val_cost")} value={fmtMoney(totalStockCostValuation)} sub={lang === "bn" ? "কেনা মূল্যের হিসাব" : "Cost Worth of Stock"} imageUrl="https://img.icons8.com/bubbles/100/buy.png" color="bg-teal-500" />
+              <KPICard label={t("inventory_val_sale")} value={fmtMoney(totalStockSaleValuation)} sub={lang === "bn" ? "বিক্রি মূল্যের হিসাব" : "Selling Worth of Stock"} icon={Package} color="bg-pink-500" />
+            </div>
+          </div>
+        );
+
+      case "graphs":
+        return (
+          <div key="graphs" className="grid grid-cols-3 gap-4 col-span-3">
+            <Card id="analytics-chart-desktop" className="col-span-2 p-5 space-y-4 bg-card/65 backdrop-blur-sm beveled-card">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold">{t("custom_graphs")}</h2>
+                <div className="flex items-center gap-3 text-xs">
+                  <div className="flex bg-muted rounded p-0.5">
+                    <button onClick={() => setChartMetric("sales")} className={`px-2 py-0.5 rounded ${chartMetric === "sales" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "বিক্রি" : "Sales"}</button>
+                    <button onClick={() => setChartMetric("profit")} className={`px-2 py-0.5 rounded ${chartMetric === "profit" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "লাভ" : "Profit"}</button>
+                    <button onClick={() => setChartMetric("expenses")} className={`px-2 py-0.5 rounded ${chartMetric === "expenses" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "খরচ" : "Expenses"}</button>
+                  </div>
+                  <div className="flex bg-muted rounded p-0.5">
+                    <button onClick={() => setChartType("area")} className={`p-1 rounded ${chartType === "area" ? "bg-background shadow" : ""}`} title="Area Chart"><AreaChartIcon className="size-3.5" /></button>
+                    <button onClick={() => setChartType("bar")} className={`p-1 rounded ${chartType === "bar" ? "bg-background shadow" : ""}`} title="Bar Chart"><BarChart3 className="size-3.5" /></button>
+                    <button onClick={() => setChartType("line")} className={`p-1 rounded ${chartType === "line" ? "bg-background shadow" : ""}`} title="Line Chart"><LineChartIcon className="size-3.5" /></button>
+                  </div>
+                  <div className="flex bg-muted rounded p-0.5">
+                    <button onClick={() => setChartRange(7)} className={`px-2 py-0.5 rounded ${chartRange === 7 ? "bg-background shadow" : ""}`}>7 Days</button>
+                    <button onClick={() => setChartRange(14)} className={`px-2 py-0.5 rounded ${chartRange === 14 ? "bg-background shadow" : ""}`}>14 Days</button>
+                    <button onClick={() => setChartRange(30)} className={`px-2 py-0.5 rounded ${chartRange === 30 ? "bg-background shadow" : ""}`}>30 Days</button>
+                  </div>
+                </div>
+              </div>
+
+              <ResponsiveContainer width="100%" height={220}>
+                <ChartComponent data={customGraphData}>
+                  <defs>
+                    <linearGradient id="dSales" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="dProfit" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="dExpense" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `৳${v}`} width={50} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <ChartDataElement type="monotone" dataKey={chartMetric} stroke={getMetricColor()} fill={chartType === "area" ? (chartMetric === "profit" ? "url(#dProfit)" : chartMetric === "expenses" ? "url(#dExpense)" : "url(#dSales)") : undefined} strokeWidth={2} name={t(chartMetric)} />
+                </ChartComponent>
+              </ResponsiveContainer>
+            </Card>
+
+            <Card className="p-5 flex flex-col justify-between bg-card/65 backdrop-blur-sm beveled-card">
+              <div>
+                <h2 className="text-sm font-semibold mb-4">{t("payment_method_breakdown")}</h2>
+                {pieData.length === 0 ? (
+                  <div className="h-44 flex items-center justify-center text-sm text-muted-foreground">{t("no_activity")}</div>
+                ) : (
+                  <>
+                    <ResponsiveContainer width="100%" height={150}>
+                      <PieChart>
+                        <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} dataKey="value" paddingAngle={3}>
+                          {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                        </Pie>
+                        <Tooltip formatter={(v: any) => `৳${Number(v).toLocaleString()}`} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="space-y-1.5 mt-2">
+                      {pieData.map(d => (
+                        <div key={d.name} className="flex items-center justify-between text-[11px]">
+                          <span className="flex items-center gap-1">
+                            <span className="size-2 rounded-full" style={{ background: d.color }} />
+                            {d.name}
+                          </span>
+                          <span className="font-semibold">{fmtMoney(d.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </Card>
+          </div>
+        );
+
+      case "reminders":
+        return (
+          <div key="reminders" className="col-span-1">
+            <Card className="p-5 space-y-4 h-full bg-card/65 backdrop-blur-sm beveled-card">
+              <div className="flex items-center justify-between border-b pb-2">
+                <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                  <Calendar className="size-4 text-primary" /> {t("reminders")}
+                </h2>
+              </div>
+              <div className="space-y-3">
+                {renderReminderForm()}
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pt-2">
+                  {reminders.length === 0 && <p className="text-xs text-muted-foreground italic text-center py-2">No custom tasks</p>}
+                  {reminders.map(r => (
+                    <div key={r.id} className={`flex items-center justify-between p-2.5 border rounded text-xs transition-colors ${
+                      isReminderActive(r) ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-border"
+                    }`}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        {(!r.logic_type || r.logic_type === "none") ? (
+                          <button type="button" onClick={() => handleToggleReminder(r.id, !r.completed)}>
+                            {r.completed ? <CheckSquare className="size-4 text-primary shrink-0" /> : <Square className="size-4 text-muted-foreground shrink-0" />}
+                          </button>
+                        ) : (
+                          <span className="inline-block text-[8px] font-bold px-1.5 py-0.2 rounded bg-primary/10 text-primary uppercase shrink-0">
+                            {lang === "bn" ? "অটো" : "Auto"}
+                          </span>
+                        )}
+                        <span className={`truncate ${r.completed ? "line-through text-muted-foreground" : "font-medium"}`}>{r.title}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 text-muted-foreground text-[10px]">
+                        <span>{r.due_date}</span>
+                        <button type="button" className="text-destructive hover:scale-105 active:scale-95" onClick={() => handleDeleteReminder(r.id)}><Trash2 className="size-3.5" /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </div>
+        );
+
+      case "bestSelling":
+        return (
+          <div key="bestSelling" className="col-span-1">
+            <Card className="p-5 h-full bg-card/65 backdrop-blur-sm beveled-card">
+              <h2 className="text-sm font-semibold mb-4">{t("best_selling")} (Revenue)</h2>
+              {topDemandedProducts.length === 0 ? (
+                <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">{t("no_activity")}</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={topDemandedProducts} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 9 }} tickFormatter={v => `৳${v}`} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={80} />
+                    <Tooltip formatter={(v: any) => `৳${Number(v).toLocaleString()}`} />
+                    <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} name="Sales revenue" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </Card>
+          </div>
+        );
+
+      case "recent":
+        return (
+          <div key="recent" className="col-span-1">
+            <Card className="p-5 flex flex-col justify-between h-full bg-card/65 backdrop-blur-sm beveled-card">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-semibold">{t("recent_activity")}</h2>
+                  <Link href="/sales" className="text-xs text-primary hover:underline">{t("view")} all →</Link>
+                </div>
+                {recentSalesToShow.length === 0 ? (
+                  <div className="py-10 text-center text-sm text-muted-foreground">{t("no_activity")}</div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                      {recentSalesToShow.map(s => (
+                        <div key={s.id} className="p-2.5 flex items-center justify-between gap-3 text-xs">
+                          <div className="min-w-0">
+                            <div className="font-medium truncate">{s.product_name}</div>
+                            <div className="text-[10px] text-muted-foreground">{s.type === "cash" ? t("cash") : s.type === "online" ? t("online_sell") : t("credit")} · {fmtDateTime(s.created_at)}</div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="font-semibold">{fmtMoney(Number(s.sell_price) * s.qty)}</div>
+                            <div className="text-[10px] text-emerald-600">+{fmtMoney(s.profit)}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   // ── Mobile Layout ─────────────────────────────────────────────────────
   if (isMobile) {
     return (
@@ -638,273 +1245,8 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Collapsible KPIs Section */}
-        <Card className="p-3 border border-border space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("key_metrics")}</span>
-            <Button variant="ghost" size="icon" className="size-7" onClick={() => setCollapsed(prev => ({ ...prev, kpis: !prev.kpis }))}>
-              {collapsed.kpis ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
-            </Button>
-          </div>
-
-          {!collapsed.kpis && (
-            <div className="space-y-2.5">
-              <div className="grid grid-cols-2 gap-2">
-                <Link href="/profits" className="block">
-                  <KPICard
-                    label={t("profit")}
-                    value={fmtMoney(profitToday)}
-                    sub={t("today")}
-                    imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
-                    color="bg-emerald-500"
-                  />
-                </Link>
-                <KPICard
-                  label={t("cash_sale")}
-                  value={fmtMoney(cashToday)}
-                  sub={t("today")}
-                  imageUrl="https://img.icons8.com/fluency/48/sell.png"
-                  color="bg-indigo-500"
-                  onClick={() => {
-                    setSalePresetType("cash");
-                    setSaleOpen(true);
-                  }}
-                />
-                <KPICard
-                  label={t("credit_sale")}
-                  value={fmtMoney(creditToday)}
-                  sub={t("today")}
-                  imageUrl="https://img.icons8.com/fluency/48/sell.png"
-                  color="bg-amber-500"
-                  onClick={() => {
-                    setSalePresetType("credit");
-                    setSaleOpen(true);
-                  }}
-                />
-                {canAccess(perms, "expenses") && (
-                  <Link href="/expenses" className="block">
-                    <KPICard label={t("expense")} value={fmtMoney(expenseToday)} sub={t("today")} icon={Receipt} color="bg-rose-500" />
-                  </Link>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-2 border-t border-border/50 pt-2.5">
-                {canAccess(perms, "expenses") ? (
-                  <Link href="/cash-management/cashbox" className="block">
-                    <KPICard label={t("cashbox")} value={fmtMoney(cashboxTotal)} imageUrl="https://img.icons8.com/plasticine/100/cash--v1.png" color="bg-indigo-600" trendUp={cashboxTotal >= 0} trend={t("balance")} />
-                  </Link>
-                ) : (
-                  <KPICard
-                    label={t("cash_sale")}
-                    value={fmtMoney(cashToday)}
-                    sub={t("today")}
-                    imageUrl="https://img.icons8.com/fluency/48/sell.png"
-                    color="bg-indigo-600"
-                    onClick={() => {
-                      setSalePresetType("cash");
-                      setSaleOpen(true);
-                    }}
-                  />
-                )}
-                {canAccess(perms, "parties") && (
-                  <Link href="/dues" className="block">
-                    <KPICard label={t("due")} value={fmtMoney(totalDues)} imageUrl="https://img.icons8.com/color/48/loan.png" color="bg-amber-600" trendUp={false} />
-                  </Link>
-                )}
-              </div>
-            </div>
-          )}
-        </Card>
-
-        {/* Collapsible Valuation Cards */}
-        <Card className="p-3 border border-border space-y-2">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{lang === "bn" ? "পণ্য স্টক মূল্য (ইনভেন্টরি)" : "Stock & Inventory Valuation"}</div>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="p-2 bg-secondary/50 rounded-lg flex items-center justify-between gap-1.5">
-              <div className="min-w-0">
-                <div className="text-[9px] text-muted-foreground">{t("inventory_val_cost")}</div>
-                <div className="font-bold text-sm mt-0.5">{fmtMoney(totalStockCostValuation)}</div>
-              </div>
-              <img src="https://img.icons8.com/bubbles/100/buy.png" className="size-8 object-contain shrink-0" alt="buy" />
-            </div>
-            <div className="p-2 bg-secondary/50 rounded-lg flex items-center justify-between gap-1.5">
-              <div className="min-w-0">
-                <div className="text-[9px] text-muted-foreground">{t("inventory_val_sale")}</div>
-                <div className="font-bold text-sm mt-0.5">{fmtMoney(totalStockSaleValuation)}</div>
-              </div>
-              <Package className="size-5 text-muted-foreground shrink-0" />
-            </div>
-          </div>
-        </Card>
-
-        {/* Collapsible Custom Graph Panel */}
-        <Card id="analytics-chart-mobile" className="p-3 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("custom_graphs")}</span>
-            <Button variant="ghost" size="icon" className="size-7" onClick={() => setCollapsed(prev => ({ ...prev, graphs: !prev.graphs }))}>
-              {collapsed.graphs ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
-            </Button>
-          </div>
-
-          {!collapsed.graphs && (
-            <div className="space-y-3">
-              {/* Chart Controls */}
-              <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px]">
-                <div className="flex bg-muted rounded p-0.5">
-                  <button onClick={() => setChartMetric("sales")} className={`px-2 py-0.5 rounded ${chartMetric === "sales" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "বিক্রি" : "Sales"}</button>
-                  <button onClick={() => setChartMetric("profit")} className={`px-2 py-0.5 rounded ${chartMetric === "profit" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "লাভ" : "Profit"}</button>
-                  <button onClick={() => setChartMetric("expenses")} className={`px-2 py-0.5 rounded ${chartMetric === "expenses" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "খরচ" : "Expenses"}</button>
-                </div>
-                <div className="flex bg-muted rounded p-0.5">
-                  <button onClick={() => setChartType("area")} className={`p-1 rounded ${chartType === "area" ? "bg-background shadow" : ""}`} title="Area Chart"><AreaChartIcon className="size-3" /></button>
-                  <button onClick={() => setChartType("bar")} className={`p-1 rounded ${chartType === "bar" ? "bg-background shadow" : ""}`} title="Bar Chart"><BarChart3 className="size-3" /></button>
-                  <button onClick={() => setChartType("line")} className={`p-1 rounded ${chartType === "line" ? "bg-background shadow" : ""}`} title="Line Chart"><LineChartIcon className="size-3" /></button>
-                </div>
-                <div className="flex bg-muted rounded p-0.5">
-                  <button onClick={() => setChartRange(7)} className={`px-1.5 py-0.5 rounded ${chartRange === 7 ? "bg-background shadow" : ""}`}>7d</button>
-                  <button onClick={() => setChartRange(14)} className={`px-1.5 py-0.5 rounded ${chartRange === 14 ? "bg-background shadow" : ""}`}>14d</button>
-                  <button onClick={() => setChartRange(30)} className={`px-1.5 py-0.5 rounded ${chartRange === 30 ? "bg-background shadow" : ""}`}>30d</button>
-                </div>
-              </div>
-
-              {/* Chart Component */}
-              <ResponsiveContainer width="100%" height={150}>
-                <ChartComponent data={customGraphData}>
-                  <defs>
-                    <linearGradient id="gSales" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="gProfit" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="gExpense" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" tick={{ fontSize: 8 }} />
-                  <YAxis tick={{ fontSize: 8 }} tickFormatter={v => `৳${v}`} width={40} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <ChartDataElement type="monotone" dataKey={chartMetric} stroke={getMetricColor()} fill={chartType === "area" ? (chartMetric === "profit" ? "url(#gProfit)" : chartMetric === "expenses" ? "url(#gExpense)" : "url(#gSales)") : undefined} strokeWidth={2} name={t(chartMetric)} />
-                </ChartComponent>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </Card>
-
-        {/* Reminders & Checklist Panel */}
-        <Card className="p-3 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("reminders")}</span>
-            <Button variant="ghost" size="icon" className="size-7" onClick={() => setCollapsed(prev => ({ ...prev, reminders: !prev.reminders }))}>
-              {collapsed.reminders ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
-            </Button>
-          </div>
-
-          {!collapsed.reminders && (
-            <div className="space-y-3">
-              {/* Custom reminders checklist */}
-              {renderReminderForm()}
-
-              {/* Active Reminders List */}
-              <div className="space-y-1.5 max-h-48 overflow-y-auto pt-2">
-                {reminders.length === 0 && <p className="text-[10px] text-muted-foreground italic text-center py-2">No custom tasks</p>}
-                {reminders.map(r => (
-                  <div key={r.id} className={`flex items-center justify-between p-2 border rounded text-xs transition-colors ${
-                    isReminderActive(r) ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-border"
-                  }`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      {(!r.logic_type || r.logic_type === "none") ? (
-                        <button type="button" onClick={() => handleToggleReminder(r.id, !r.completed)}>
-                          {r.completed ? <CheckSquare className="size-4 text-primary shrink-0" /> : <Square className="size-4 text-muted-foreground shrink-0" />}
-                        </button>
-                      ) : (
-                        <span className="inline-block text-[8px] font-bold px-1 py-0.2 rounded bg-primary/15 text-primary uppercase shrink-0">
-                          {lang === "bn" ? "অটো" : "Auto"}
-                        </span>
-                      )}
-                      <span className={`truncate ${r.completed ? "line-through text-muted-foreground" : "font-medium"}`}>{r.title}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0 text-muted-foreground text-[10px]">
-                      <span>{r.due_date}</span>
-                      <button type="button" className="text-destructive hover:scale-105 active:scale-95" onClick={() => handleDeleteReminder(r.id)}><Trash2 className="size-3.5" /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </Card>
-
-        {/* Quick Links */}
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { to: "/products", icon: Package, label: t("products"), perm: "products" as const },
-            { to: "/sales", icon: ShoppingBag, label: t("sales"), perm: "sales" as const },
-            { to: "/parties", icon: Users, label: t("parties"), perm: "parties" as const },
-          ].filter(item => canAccess(perms, item.perm)).map(({ to, icon: Icon, label }) => (
-            <Link key={to} href={to} className="flex flex-col items-center gap-1 p-2 rounded-xl border border-border bg-card hover:bg-accent transition-colors">
-              <Icon className="size-4 text-primary" />
-              <span className="text-[10px] font-medium text-center">{label}</span>
-            </Link>
-          ))}
-        </div>
-
-        {/* Demanded products list */}
-        {topDemandedProducts.length > 0 && (
-          <Card className="p-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground">{t("best_selling")} ({t("qty")})</h2>
-            <div className="space-y-1.5">
-              {topDemandedProducts.map((p, i) => (
-                <div key={p.name} className="flex justify-between items-center text-xs p-1 px-2 bg-secondary/40 rounded">
-                  <span className="truncate">{i+1}. {p.name}</span>
-                  <span className="font-bold">{p.value} units</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
-
-        {/* Collapsible Recent Activity */}
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("recent_activity")}</h2>
-            <Button variant="ghost" size="icon" className="size-7" onClick={() => setCollapsed(prev => ({ ...prev, recent: !prev.recent }))}>
-              {collapsed.recent ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
-            </Button>
-          </div>
-          {!collapsed.recent && (
-            <div className="space-y-2">
-              <Card className="divide-y divide-border overflow-hidden">
-                {recentSalesToShow.length === 0 && <div className="p-4 text-center text-xs text-muted-foreground">{t("no_activity")}</div>}
-                {recentSalesToShow.map(s => (
-                  <div key={s.id} className="p-2.5 flex items-center justify-between gap-3 text-xs">
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{s.product_name}</div>
-                      <div className="text-[10px] text-muted-foreground">{s.type === "cash" ? t("cash") : s.type === "online" ? t("online_sell") : t("credit")} · {fmtDateTime(s.created_at)}</div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="font-semibold">{fmtMoney(Number(s.sell_price) * s.qty)}</div>
-                      <div className="text-[10px] text-emerald-600">+{fmtMoney(s.profit)}</div>
-                    </div>
-                  </div>
-                ))}
-              </Card>
-              {sortedRecentSales.length > recentSalesToShow.length && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full text-xs h-8 hover:bg-accent border border-dashed border-border/60"
-                  onClick={() => setActivityLimit(prev => prev + 5)}
-                >
-                  {lang === "bn" ? "আরও লোড করুন ↓" : "Load More ↓"}
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
+        {/* Widgets loop ordered dynamically */}
+        {widgetOrder.map(widgetId => renderWidget(widgetId))}
 
         {/* Reminders Startup Popup Modal */}
         {showPopup && activeRemindersList.length > 0 && (
@@ -996,278 +1338,9 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Row 1: KPI Cards */}
-      <div className="grid grid-cols-5 gap-4">
-        <Link href="/profits" className="block">
-          <KPICard
-            label={t("profit")}
-            value={fmtMoney(profitToday)}
-            sub={t("today")}
-            imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
-            color="bg-emerald-500"
-            trendUp
-          />
-        </Link>
-        {canAccess(perms, "expenses") ? (
-          <Link href="/cash-management/cashbox" className="block">
-            <KPICard label={t("cashbox")} value={fmtMoney(cashboxTotal)} imageUrl="https://img.icons8.com/plasticine/100/cash--v1.png" color="bg-indigo-500" trendUp={cashboxTotal >= 0} trend={t("balance")} />
-          </Link>
-        ) : (
-          <KPICard
-            label={t("cash_sale")}
-            value={fmtMoney(cashToday)}
-            sub={t("today")}
-            imageUrl="https://img.icons8.com/fluency/48/sell.png"
-            color="bg-indigo-500"
-            trendUp
-            onClick={() => {
-              setSalePresetType("cash");
-              setSaleOpen(true);
-            }}
-          />
-        )}
-        <KPICard
-          label={t("cash_sale")}
-          value={fmtMoney(cashToday)}
-          sub={t("today")}
-          imageUrl="https://img.icons8.com/fluency/48/sell.png"
-          color="bg-indigo-600"
-          trendUp
-          onClick={() => {
-            setSalePresetType("cash");
-            setSaleOpen(true);
-          }}
-        />
-        <KPICard
-          label={t("online_sell")}
-          value={fmtMoney(onlineToday)}
-          sub={t("today")}
-          imageUrl="https://img.icons8.com/fluency/48/sell.png"
-          color="bg-sky-500"
-          trendUp
-          onClick={() => {
-            setSalePresetType("online");
-            setSaleOpen(true);
-          }}
-        />
-        {canAccess(perms, "parties") && (
-          <Link href="/dues" className="block">
-            <KPICard label={t("due")} value={fmtMoney(totalDues)} imageUrl="https://img.icons8.com/color/48/loan.png" color="bg-amber-500" trendUp={false} trend="Outstanding" />
-          </Link>
-        )}
-      </div>
-
-      {/* Row 2: Secondary KPIs / Valuation */}
-      <div className="grid grid-cols-4 gap-4">
-        <KPICard
-          label={t("credit_sale")}
-          value={fmtMoney(creditToday)}
-          sub={t("today")}
-          imageUrl="https://img.icons8.com/fluency/48/sell.png"
-          color="bg-rose-500"
-          trendUp={false}
-          onClick={() => {
-            setSalePresetType("credit");
-            setSaleOpen(true);
-          }}
-        />
-        {canAccess(perms, "expenses") && (
-          <Link href="/expenses" className="block">
-            <KPICard label={t("expense")} value={fmtMoney(expenseToday)} sub={t("today")} icon={Receipt} color="bg-orange-500" trendUp={false} />
-          </Link>
-        )}
-        <KPICard label={t("inventory_val_cost")} value={fmtMoney(totalStockCostValuation)} sub={lang === "bn" ? "কেনা মূল্যের হিসাব" : "Cost Worth of Stock"} imageUrl="https://img.icons8.com/bubbles/100/buy.png" color="bg-teal-500" />
-        <KPICard label={t("inventory_val_sale")} value={fmtMoney(totalStockSaleValuation)} sub={lang === "bn" ? "বিক্রি মূল্যের হিসাব" : "Selling Worth of Stock"} icon={Package} color="bg-pink-500" />
-      </div>
-
-      {/* Row 3: Custom Graph + Pie */}
-      <div className="grid grid-cols-3 gap-4">
-        {/* Custom interactive graph */}
-        <Card id="analytics-chart-desktop" className="col-span-2 p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">{t("custom_graphs")}</h2>
-            
-            {/* Chart Control Toolbar */}
-            <div className="flex items-center gap-3 text-xs">
-              {/* Metric Selectors */}
-              <div className="flex bg-muted rounded p-0.5">
-                <button onClick={() => setChartMetric("sales")} className={`px-2 py-0.5 rounded ${chartMetric === "sales" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "বিক্রি" : "Sales"}</button>
-                <button onClick={() => setChartMetric("profit")} className={`px-2 py-0.5 rounded ${chartMetric === "profit" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "লাভ" : "Profit"}</button>
-                <button onClick={() => setChartMetric("expenses")} className={`px-2 py-0.5 rounded ${chartMetric === "expenses" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "খরচ" : "Expenses"}</button>
-              </div>
-              {/* Chart Style Selectors */}
-              <div className="flex bg-muted rounded p-0.5">
-                <button onClick={() => setChartType("area")} className={`p-1 rounded ${chartType === "area" ? "bg-background shadow" : ""}`} title="Area Chart"><AreaChartIcon className="size-3.5" /></button>
-                <button onClick={() => setChartType("bar")} className={`p-1 rounded ${chartType === "bar" ? "bg-background shadow" : ""}`} title="Bar Chart"><BarChart3 className="size-3.5" /></button>
-                <button onClick={() => setChartType("line")} className={`p-1 rounded ${chartType === "line" ? "bg-background shadow" : ""}`} title="Line Chart"><LineChartIcon className="size-3.5" /></button>
-              </div>
-              {/* Range Selectors */}
-              <div className="flex bg-muted rounded p-0.5">
-                <button onClick={() => setChartRange(7)} className={`px-2 py-0.5 rounded ${chartRange === 7 ? "bg-background shadow" : ""}`}>7 Days</button>
-                <button onClick={() => setChartRange(14)} className={`px-2 py-0.5 rounded ${chartRange === 14 ? "bg-background shadow" : ""}`}>14 Days</button>
-                <button onClick={() => setChartRange(30)} className={`px-2 py-0.5 rounded ${chartRange === 30 ? "bg-background shadow" : ""}`}>30 Days</button>
-              </div>
-            </div>
-          </div>
-
-          <ResponsiveContainer width="100%" height={220}>
-            <ChartComponent data={customGraphData}>
-              <defs>
-                <linearGradient id="dSales" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="dProfit" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="dExpense" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `৳${v}`} width={50} />
-              <Tooltip content={<ChartTooltip />} />
-              <ChartDataElement type="monotone" dataKey={chartMetric} stroke={getMetricColor()} fill={chartType === "area" ? (chartMetric === "profit" ? "url(#dProfit)" : chartMetric === "expenses" ? "url(#dExpense)" : "url(#dSales)") : undefined} strokeWidth={2} name={t(chartMetric)} />
-            </ChartComponent>
-          </ResponsiveContainer>
-        </Card>
-
-        {/* Pie: Payment breakdown */}
-        <Card className="p-5 flex flex-col justify-between">
-          <div>
-            <h2 className="text-sm font-semibold mb-4">{t("payment_method_breakdown")}</h2>
-            {pieData.length === 0 ? (
-              <div className="h-44 flex items-center justify-center text-sm text-muted-foreground">{t("no_activity")}</div>
-            ) : (
-              <>
-                <ResponsiveContainer width="100%" height={150}>
-                  <PieChart>
-                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} dataKey="value" paddingAngle={3}>
-                      {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                    </Pie>
-                    <Tooltip formatter={(v: any) => `৳${Number(v).toLocaleString()}`} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="space-y-1.5 mt-2">
-                  {pieData.map(d => (
-                    <div key={d.name} className="flex items-center justify-between text-[11px]">
-                      <span className="flex items-center gap-1">
-                        <span className="size-2 rounded-full" style={{ background: d.color }} />
-                        {d.name}
-                      </span>
-                      <span className="font-semibold">{fmtMoney(d.value)}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </Card>
-      </div>
-
-      {/* Row 4: Reminders checklist panel + Low stock widgets + Top products */}
-      <div className="grid grid-cols-3 gap-4">
-        {/* Interactive Reminders / Tasks checklist */}
-        <Card className="p-5 space-y-4">
-          <div className="flex items-center justify-between border-b pb-2">
-            <h2 className="text-sm font-semibold flex items-center gap-1.5">
-              <Calendar className="size-4 text-primary" /> {t("reminders")}
-            </h2>
-          </div>
-
-          <div className="space-y-3">
-            {/* Custom Reminders Config form */}
-            {renderReminderForm()}
-
-            {/* Reminder list items */}
-            <div className="space-y-1.5 max-h-48 overflow-y-auto pt-2">
-              {reminders.length === 0 && <p className="text-xs text-muted-foreground italic text-center py-2">No custom tasks</p>}
-              {reminders.map(r => (
-                <div key={r.id} className={`flex items-center justify-between p-2.5 border rounded text-xs transition-colors ${
-                  isReminderActive(r) ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-border"
-                }`}>
-                  <div className="flex items-center gap-2 min-w-0">
-                    {(!r.logic_type || r.logic_type === "none") ? (
-                      <button type="button" onClick={() => handleToggleReminder(r.id, !r.completed)}>
-                        {r.completed ? <CheckSquare className="size-4 text-primary shrink-0" /> : <Square className="size-4 text-muted-foreground shrink-0" />}
-                      </button>
-                    ) : (
-                      <span className="inline-block text-[8px] font-bold px-1.5 py-0.2 rounded bg-primary/10 text-primary uppercase shrink-0">
-                        {lang === "bn" ? "অটো" : "Auto"}
-                      </span>
-                    )}
-                    <span className={`truncate ${r.completed ? "line-through text-muted-foreground" : "font-medium"}`}>{r.title}</span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 text-muted-foreground text-[10px]">
-                    <span>{r.due_date}</span>
-                    <button type="button" className="text-destructive hover:scale-105 active:scale-95" onClick={() => handleDeleteReminder(r.id)}><Trash2 className="size-3.5" /></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
-
-        {/* Best selling products bar chart */}
-        <Card className="p-5">
-          <h2 className="text-sm font-semibold mb-4">{t("best_selling")} (Revenue)</h2>
-          {topDemandedProducts.length === 0 ? (
-            <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">{t("no_activity")}</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={topDemandedProducts} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 9 }} tickFormatter={v => `৳${v}`} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={80} />
-                <Tooltip formatter={(v: any) => `৳${Number(v).toLocaleString()}`} />
-                <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} name="Sales revenue" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </Card>
-
-        {/* Recent Activity Table */}
-        <Card className="p-5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold">{t("recent_activity")}</h2>
-              <Link href="/sales" className="text-xs text-primary hover:underline">{t("view")} all →</Link>
-            </div>
-            {recentSalesToShow.length === 0 ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">{t("no_activity")}</div>
-            ) : (
-              <div className="space-y-3">
-                <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
-                  {recentSalesToShow.map(s => (
-                    <div key={s.id} className="flex justify-between items-center py-1.5 border-b last:border-b-0 text-xs">
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold truncate">{s.product_name} <span className="text-muted-foreground">×{s.qty}</span></div>
-                        <div className="text-[10px] text-muted-foreground">{fmtDateTime(s.created_at)}</div>
-                      </div>
-                      <div className="text-right shrink-0 ml-3">
-                        <div className="font-bold">{fmtMoney(Number(s.sell_price) * s.qty)}</div>
-                        <div className="text-[10px] text-emerald-600">+{fmtMoney(s.profit)}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {sortedRecentSales.length > recentSalesToShow.length && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-xs h-8 hover:bg-accent border border-dashed border-border/60"
-                    onClick={() => setActivityLimit(prev => prev + 5)}
-                  >
-                    {lang === "bn" ? "আরও লোড করুন ↓" : "Load More ↓"}
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-        </Card>
+      {/* Render Desktop widgets dynamically in custom order */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {widgetOrder.filter(id => id !== 'valuations' && id !== 'quickLinks').map(widgetId => renderDesktopWidget(widgetId))}
       </div>
 
       {/* Reminders Startup Popup Modal */}

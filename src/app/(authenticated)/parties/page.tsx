@@ -3,7 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ChevronRight, UserPlus, Search, Users, Archive, Download } from "lucide-react";
-import { getParties, getSales, getAllPayments, getAllPartyReceivables } from "@/lib/queries";
+import { getParties, getSales, getAllPayments, getAllPartyReceivables, getAllPartyPayables, getAllPayableSettlements } from "@/lib/queries";
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import { PaginationBar, paginate } from "@/components/ui/pagination-bar";
 import { useT } from "@/lib/i18n";
@@ -22,11 +22,13 @@ import { downloadCsv, exportDateStamp } from "@/lib/export";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function PartiesPage() {
-  const { t } = useT();
+  const { lang, t } = useT();
   const parties = useCachedQuery(["parties"], getParties);
   const sales = useCachedQuery(["sales"], getSales);
   const allPayments = useCachedQuery(["all-payments"], getAllPayments);
   const allReceivables = useCachedQuery(["all-party-receivables"], getAllPartyReceivables);
+  const allPayables = useCachedQuery(["all-party-payables"], getAllPartyPayables);
+  const allSettlements = useCachedQuery(["all-payable-settlements"], getAllPayableSettlements);
   const qc = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -36,10 +38,9 @@ export default function PartiesPage() {
 
   const duesByParty: Record<string, number> = {};
   (sales.data ?? []).forEach(s => {
-    if (s.party_id) duesByParty[s.party_id] = (duesByParty[s.party_id] ?? 0) + Number(s.due_amount);
-  });
-  (allReceivables.data ?? []).forEach(r => {
-    duesByParty[r.party_id] = (duesByParty[r.party_id] ?? 0) + Number(r.amount);
+    if (s.party_id && !s.returned) {
+      duesByParty[s.party_id] = (duesByParty[s.party_id] ?? 0) + Number(s.due_amount);
+    }
   });
 
   const paidByParty: Record<string, number> = {};
@@ -52,9 +53,31 @@ export default function PartiesPage() {
     extraByParty[r.party_id] = (extraByParty[r.party_id] ?? 0) + Number(r.amount);
   });
 
-  const allPartyIds = new Set([...Object.keys(duesByParty), ...Object.keys(paidByParty)]);
-  const totalOutstanding = [...allPartyIds].reduce((sum, pid) => {
-    return sum + Math.max((duesByParty[pid] ?? 0) - (paidByParty[pid] ?? 0), 0);
+  const payablesByParty: Record<string, number> = {};
+  (allPayables.data ?? []).forEach(p => {
+    payablesByParty[p.party_id] = (payablesByParty[p.party_id] ?? 0) + Number(p.amount);
+  });
+
+  const settlementsByParty: Record<string, number> = {};
+  (allSettlements.data ?? []).forEach(s => {
+    settlementsByParty[s.party_id] = (settlementsByParty[s.party_id] ?? 0) + Number(s.amount);
+  });
+
+  const getPartyReceivable = (partyId: string) => {
+    const totalDues = (duesByParty[partyId] ?? 0) + (extraByParty[partyId] ?? 0);
+    const paid = paidByParty[partyId] ?? 0;
+    return Math.max(totalDues - paid, 0);
+  };
+
+  const getPartyPayable = (partyId: string) => {
+    const payableTotal = payablesByParty[partyId] ?? 0;
+    const settledTotal = settlementsByParty[partyId] ?? 0;
+    return Math.max(payableTotal - settledTotal, 0);
+  };
+
+  const totalOutstanding = (parties.data ?? []).reduce((sum, p) => {
+    if (p.archived) return sum;
+    return sum + getPartyReceivable(p.id);
   }, 0);
 
   const filtered = (parties.data ?? []).filter(p => {
@@ -65,33 +88,34 @@ export default function PartiesPage() {
 
   const { items: pagedParties, totalPages, safePage } = paginate(filtered, page, pageSize);
 
-  function partyOutstanding(partyId: string) {
-    const raw = (duesByParty[partyId] ?? 0) + (extraByParty[partyId] ?? 0);
-    return Math.max(raw - (paidByParty[partyId] ?? 0), 0);
-  }
-
   function prefetchParty(p: Party) {
     setCachedData<Party>(qc, ["party", p.id], p);
   }
 
   async function toggleArchive(p: Party) {
     const nextVal = !p.archived;
+    const prevParties = qc.getQueryData<Party[]>(["parties"]);
+    setCachedData<Party[]>(qc, ["parties"], old =>
+      (old ?? []).map(x => x.id === p.id ? { ...x, archived: nextVal } : x)
+    );
+    toast.success(nextVal ? t("archived") : t("active"));
     try {
       await archivePartyFn({ data: { id: p.id, archived: nextVal } });
-      toast.success(nextVal ? t("archived") : t("active"));
-      qc.invalidateQueries({ queryKey: ["parties"] });
+      await refreshQueries(qc, ["parties"]);
     } catch (err: unknown) {
+      if (prevParties) setCachedData(qc, ["parties"], prevParties);
       toast.error(err instanceof Error ? err.message : String(err));
     }
   }
 
   function exportParties() {
-    const headers = ["ID", "Name", "Phone", "Outstanding Dues", "Archived"];
+    const headers = ["ID", "Name", "Phone", "Owed to Me", "I Owe", "Archived"];
     const rows = filtered.map(p => [
       p.id,
       p.name,
       p.phone || "",
-      partyOutstanding(p.id),
+      getPartyReceivable(p.id),
+      getPartyPayable(p.id),
       p.archived ? "Yes" : "No"
     ]);
     downloadCsv(`parties_${activeTab}_${exportDateStamp()}.csv`, headers, rows);
@@ -158,10 +182,21 @@ export default function PartiesPage() {
           </Button>
         </Card>
       )}
-
-      <div className="space-y-1.5">
+      <div className="space-y-2.5">
         {pagedParties.map(p => {
-          const outstanding = partyOutstanding(p.id);
+          const outstanding = getPartyReceivable(p.id);
+          const payableOutstanding = getPartyPayable(p.id);
+          
+          let cardBorder = "border-border";
+          let avatarStyle = "bg-secondary text-secondary-foreground";
+          if (outstanding > 0) {
+            cardBorder = "border-primary/30";
+            avatarStyle = "bg-primary/15 text-primary";
+          } else if (payableOutstanding > 0) {
+            cardBorder = "border-rose-300/30";
+            avatarStyle = "bg-rose-500/15 text-rose-600";
+          }
+
           return (
             <Link
               key={p.id}
@@ -170,11 +205,9 @@ export default function PartiesPage() {
               onTouchStart={() => prefetchParty(p)}
               className="block w-full text-left active:scale-[0.99] transition-transform"
             >
-              <Card className={`overflow-hidden ${outstanding > 0 ? "border-primary/30" : "border-border"}`}>
+              <Card className={`overflow-hidden ${cardBorder}`}>
                 <div className="flex items-center p-3 gap-2.5">
-                  <div className={`size-9 rounded-full grid place-items-center text-sm font-bold shrink-0 ${
-                    outstanding > 0 ? "bg-primary/15 text-primary" : "bg-secondary text-secondary-foreground"
-                  }`}>
+                  <div className={`size-9 rounded-full grid place-items-center text-sm font-bold shrink-0 ${avatarStyle}`}>
                     {(p.name || "P").charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -183,11 +216,24 @@ export default function PartiesPage() {
                     <div className="text-[10px] text-primary mt-0.5">{t("view")} →</div>
                   </div>
                   <div className="text-right shrink-0 flex items-center gap-2">
-                    <div>
-                      <div className={`text-sm font-bold ${outstanding > 0 ? "text-primary" : "text-success"}`}>
-                        {fmtMoney(outstanding)}
-                      </div>
-                      <div className="text-[9px] text-muted-foreground">{outstanding > 0 ? t("outstanding") : t("clear")}</div>
+                    <div className="flex flex-col items-end gap-0.5">
+                      {outstanding > 0 && (
+                        <div>
+                          <span className="text-[9px] text-muted-foreground block">{lang === "bn" ? "পাওনা" : "Owed to me"}</span>
+                          <span className="text-xs font-bold text-amber-600 font-serif">{fmtMoney(outstanding)}</span>
+                        </div>
+                      )}
+                      {payableOutstanding > 0 && (
+                        <div>
+                          <span className="text-[9px] text-muted-foreground block">{lang === "bn" ? "দেনা" : "I owe"}</span>
+                          <span className="text-xs font-bold text-rose-600 font-serif">{fmtMoney(payableOutstanding)}</span>
+                        </div>
+                      )}
+                      {outstanding === 0 && payableOutstanding === 0 && (
+                        <div>
+                          <span className="text-xs font-bold text-emerald-600">{lang === "bn" ? "পরিশোধিত" : "Clear"}</span>
+                        </div>
+                      )}
                     </div>
                     <Button
                       size="sm"
@@ -236,6 +282,7 @@ function AddPartyDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
     const tempId = `temp-${Date.now()}`;
     const optimistic: Party = { id: tempId, name: trimmedName, phone: phoneVal, created_at: new Date().toISOString() };
 
+    const prevParties = qc.getQueryData<Party[]>(["parties"]);
     setCachedData<Party[]>(qc, ["parties"], old => [...(old ?? []), optimistic].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
     setName(""); setPhone("");
     onOpenChange(false);
@@ -249,7 +296,11 @@ function AddPartyDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
       );
       await refreshQueries(qc, ["parties"]);
     } catch (err: unknown) {
-      setCachedData<Party[]>(qc, ["parties"], old => (old ?? []).filter(p => p.id !== tempId));
+      if (prevParties) {
+        setCachedData<Party[]>(qc, ["parties"], prevParties);
+      } else {
+        setCachedData<Party[]>(qc, ["parties"], old => (old ?? []).filter(p => p.id !== tempId));
+      }
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);

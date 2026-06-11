@@ -22,6 +22,7 @@ import {
   createPaymentFn, deletePaymentFn, deleteSaleFn,
   createPartyReceivableFn, createPartyPayableFn, createPayableSettlementFn,
   deletePartyReceivableFn, deletePartyPayableFn, updatePartyFn, deletePartyFn,
+  deletePayableSettlementFn,
 } from "@/lib/rpc";
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import { setCachedData, refreshQueries } from "@/lib/optimistic-cache";
@@ -31,7 +32,7 @@ import Link from "next/link";
 export default function PartyDetail() {
   const params = useParams();
   const id = typeof params?.id === "string" ? params.id : "";
-  const { t } = useT();
+  const { lang, t } = useT();
   const router = useRouter();
   const qc = useQueryClient();
 
@@ -50,7 +51,7 @@ export default function PartyDetail() {
   const party = partyQuery.data;
   const isLoading = partyQuery.isLoading && !party;
 
-  const saleDue = (sales.data ?? []).reduce((a, s) => a + Number(s.due_amount), 0);
+  const saleDue = (sales.data ?? []).filter(s => !s.returned).reduce((a, s) => a + Number(s.due_amount), 0);
   const extraReceivable = (receivables.data ?? []).reduce((a, r) => a + Number(r.amount), 0);
   const paidTotal = (payments.data ?? []).reduce((a, p) => a + Number(p.amount), 0);
   const outstanding = Math.max(saleDue + extraReceivable - paidTotal, 0);
@@ -66,7 +67,7 @@ export default function PartyDetail() {
   };
 
   const entries: Entry[] = [
-    ...(sales.data ?? []).filter(s => Number(s.due_amount) > 0).map(s => ({
+    ...(sales.data ?? []).filter(s => Number(s.due_amount) > 0 && !s.returned).map(s => ({
       id: "s" + s.id, rawId: s.id, date: s.created_at,
       label: s.product_id ? `${s.product_name} ×${s.qty}` : s.product_name,
       amount: Number(s.due_amount), kind: "sale" as const, deletable: !s.product_id,
@@ -89,12 +90,18 @@ export default function PartyDetail() {
     ...(settlements.data ?? []).map(s => ({
       id: "st" + s.id, rawId: s.id, date: s.created_at,
       label: s.note || t("pay_party"), amount: -Number(s.amount),
-      kind: "settlement" as const, deletable: false,
+      kind: "settlement" as const, deletable: true,
     })),
   ].sort((a, b) => +new Date(b.date) - +new Date(a.date));
 
   async function handleDelete(entry: Entry) {
     if (!confirm(t("delete") + "?")) return;
+    const prevPayments = qc.getQueryData<Payment[]>(["payments", id]);
+    const prevSales = qc.getQueryData<Sale[]>(["party-detail", "sales", id]);
+    const prevReceivables = qc.getQueryData<PartyLedger[]>(["party-receivables", id]);
+    const prevPayables = qc.getQueryData<PartyLedger[]>(["party-payables", id]);
+    const prevSettlements = qc.getQueryData<PartyLedger[]>(["party-settlements", id]);
+
     try {
       if (entry.kind === "payment") {
         setCachedData<Payment[]>(qc, ["payments", id], old =>
@@ -119,11 +126,20 @@ export default function PartyDetail() {
           (old ?? []).filter(p => p.id !== entry.rawId),
         );
         await deletePartyPayableFn({ data: { id: entry.rawId } });
+      } else if (entry.kind === "settlement") {
+        setCachedData<PartyLedger[]>(qc, ["party-settlements", id], old =>
+          (old ?? []).filter(s => s.id !== entry.rawId),
+        );
+        await deletePayableSettlementFn({ data: { id: entry.rawId } });
       }
-      await refreshQueries(qc, ["all-payments"], ["sales"], ["all-party-receivables"]);
+      await refreshQueries(qc, ["all-payments"], ["sales"], ["all-party-receivables"], ["all-party-payables"], ["party-settlements", id], ["all-payable-settlements"]);
       toast.success(t("delete"));
     } catch (err: unknown) {
-      await refreshQueries(qc, ["payments", id], ["party-detail", "sales", id], ["party-receivables", id], ["party-payables", id]);
+      if (entry.kind === "payment" && prevPayments) setCachedData(qc, ["payments", id], prevPayments);
+      if (entry.kind === "sale" && prevSales) setCachedData(qc, ["party-detail", "sales", id], prevSales);
+      if (entry.kind === "receivable" && prevReceivables) setCachedData(qc, ["party-receivables", id], prevReceivables);
+      if (entry.kind === "payable" && prevPayables) setCachedData(qc, ["party-payables", id], prevPayables);
+      if (entry.kind === "settlement" && prevSettlements) setCachedData(qc, ["party-settlements", id], prevSettlements);
       toast.error(err instanceof Error ? err.message : String(err));
     }
   }
@@ -165,6 +181,7 @@ export default function PartyDetail() {
             className="text-destructive border-destructive/30"
             onClick={async () => {
               if (!confirm(t("delete") + ` ${party.name || "Unnamed"}?`)) return;
+              const prevParties = qc.getQueryData<Party[]>(["parties"]);
               try {
                 setCachedData<Party[]>(qc, ["parties"], old => (old ?? []).filter(p => p.id !== id));
                 await deletePartyFn({ data: { id } });
@@ -172,7 +189,7 @@ export default function PartyDetail() {
                 toast.success(t("delete"));
                 router.push("/parties");
               } catch (err: unknown) {
-                await refreshQueries(qc, ["parties"]);
+                if (prevParties) setCachedData<Party[]>(qc, ["parties"], prevParties);
                 toast.error(err instanceof Error ? err.message : String(err));
               }
             }}
@@ -187,6 +204,8 @@ export default function PartyDetail() {
           <div className="h-full w-1/3 bg-primary animate-pulse rounded-full" />
         </div>
       )}
+
+      {/* Decoupled balances, netting card removed */}
 
       <div className="grid grid-cols-2 gap-3">
         <Card className="p-4 glass-card border-primary/20">

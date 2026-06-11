@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   getParties, getSales, getAllPayments, getAllPartyReceivables,
+  getAllPartyPayables, getAllPayableSettlements,
   type Party, type Sale, type Payment, type PartyLedger
 } from "@/lib/queries";
 import { useCachedQuery } from "@/hooks/use-cached-query";
@@ -16,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { createPaymentFn, createPartyReceivableFn } from "@/lib/rpc";
-import { refreshQueries } from "@/lib/optimistic-cache";
+import { setCachedData, refreshQueries } from "@/lib/optimistic-cache";
 import Link from "next/link";
 import { downloadCsv, exportDateStamp } from "@/lib/export";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,6 +34,8 @@ export default function DuesPage() {
   const sales = useCachedQuery(["sales"], getSales);
   const allPayments = useCachedQuery(["all-payments"], getAllPayments);
   const allReceivables = useCachedQuery(["all-party-receivables"], getAllPartyReceivables);
+  const allPayables = useCachedQuery(["all-party-payables"], getAllPartyPayables);
+  const allSettlements = useCachedQuery(["all-payable-settlements"], getAllPayableSettlements);
 
   const [activeTab, setActiveTab] = useState<DuesTab>("outstanding");
   const [search, setSearch] = useState("");
@@ -68,6 +71,16 @@ export default function DuesPage() {
     paidByParty[p.party_id] = (paidByParty[p.party_id] ?? 0) + Number(p.amount);
   });
 
+  const payablesByParty: Record<string, number> = {};
+  (allPayables.data ?? []).forEach(p => {
+    payablesByParty[p.party_id] = (payablesByParty[p.party_id] ?? 0) + Number(p.amount);
+  });
+
+  const settlementsByParty: Record<string, number> = {};
+  (allSettlements.data ?? []).forEach(s => {
+    settlementsByParty[s.party_id] = (settlementsByParty[s.party_id] ?? 0) + Number(s.amount);
+  });
+
   // Outstanding calculator
   const getOutstanding = (partyId: string) => {
     const totalDues = (duesByParty[partyId] ?? 0) + (receivablesByParty[partyId] ?? 0);
@@ -80,11 +93,13 @@ export default function DuesPage() {
     const outstanding = getOutstanding(p.id);
     const totalDues = (duesByParty[p.id] ?? 0) + (receivablesByParty[p.id] ?? 0);
     const totalPaid = paidByParty[p.id] ?? 0;
+    const payableOutstanding = Math.max((payablesByParty[p.id] ?? 0) - (settlementsByParty[p.id] ?? 0), 0);
     return {
       ...p,
       outstanding,
       totalDues,
-      totalPaid
+      totalPaid,
+      payableOutstanding
     };
   });
 
@@ -133,19 +148,33 @@ export default function DuesPage() {
   const submitCollection = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedParty || !amount || Number(amount) <= 0) return;
+    const amt = Number(amount);
+    const tempId = `temp-${Date.now()}`;
+    const optimisticPayment: Payment = {
+      id: tempId,
+      party_id: selectedParty.id,
+      amount: amt,
+      note: note.trim() || null,
+      created_at: new Date().toISOString()
+    };
+
+    const prevPayments = qc.getQueryData<Payment[]>(["all-payments"]);
+    setCachedData<Payment[]>(qc, ["all-payments"], old => [optimisticPayment, ...(old ?? [])]);
+    setCollectOpen(false);
+    toast.success(lang === "bn" ? "আদায় সফলভাবে সংরক্ষণ হয়েছে" : "Payment collection recorded");
+
     setBusy(true);
     try {
       await createPaymentFn({
         data: {
           party_id: selectedParty.id,
-          amount: Number(amount),
+          amount: amt,
           note: note.trim() || null
         }
       });
-      toast.success(lang === "bn" ? "আদায় সফলভাবে সংরক্ষণ হয়েছে" : "Payment collection recorded");
       await refreshQueries(qc, ["all-payments"], ["sales"], ["parties"], ["all-party-receivables"]);
-      setCollectOpen(false);
     } catch (err: any) {
+      if (prevPayments) setCachedData(qc, ["all-payments"], prevPayments);
       toast.error(err.message || String(err));
     } finally {
       setBusy(false);
@@ -155,19 +184,33 @@ export default function DuesPage() {
   const submitReceivable = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedParty || !amount || Number(amount) <= 0) return;
+    const amt = Number(amount);
+    const tempId = `temp-${Date.now()}`;
+    const optimisticReceivable: PartyLedger = {
+      id: tempId,
+      party_id: selectedParty.id,
+      amount: amt,
+      note: note.trim() || null,
+      created_at: new Date().toISOString()
+    };
+
+    const prevReceivables = qc.getQueryData<PartyLedger[]>(["all-party-receivables"]);
+    setCachedData<PartyLedger[]>(qc, ["all-party-receivables"], old => [optimisticReceivable, ...(old ?? [])]);
+    setAddDueOpen(false);
+    toast.success(lang === "bn" ? "নতুন বাকী সফলভাবে যুক্ত হয়েছে" : "Receivable/due recorded");
+
     setBusy(true);
     try {
       await createPartyReceivableFn({
         data: {
           party_id: selectedParty.id,
-          amount: Number(amount),
+          amount: amt,
           note: note.trim() || null
         }
       });
-      toast.success(lang === "bn" ? "নতুন বাকী সফলভাবে যুক্ত হয়েছে" : "Receivable/due recorded");
       await refreshQueries(qc, ["all-party-receivables"], ["sales"], ["parties"], ["all-payments"]);
-      setAddDueOpen(false);
     } catch (err: any) {
+      if (prevReceivables) setCachedData(qc, ["all-party-receivables"], prevReceivables);
       toast.error(err.message || String(err));
     } finally {
       setBusy(false);
@@ -283,57 +326,77 @@ export default function DuesPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {pagedParties.map((p: any) => (
-            <Card key={p.id} className="p-4 flex flex-col justify-between gap-3 bg-card/75 backdrop-blur-sm border-border/80 hover:shadow-md transition-shadow beveled-card">
-              <div className="space-y-1.5">
-                <div className="flex items-start justify-between gap-2">
-                  <Link href={`/parties/${p.id}`} className="font-semibold text-sm hover:text-primary transition-colors hover:underline flex items-center gap-1 group">
-                    {p.name}
-                    <ArrowRight className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </Link>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                    p.outstanding > 0 
-                      ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20" 
-                      : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
-                  }`}>
-                    {fmtMoney(p.outstanding)}
-                  </span>
-                </div>
-                {p.phone && <div className="text-xs text-muted-foreground">{p.phone}</div>}
-              </div>
+          {pagedParties.map((p: any) => {
+            const isReceivable = p.outstanding > 0;
+            const isPayable = p.payableOutstanding > 0;
 
-              <div className="text-[10px] grid grid-cols-2 gap-2 py-1.5 border-t border-b border-dashed border-border/70 my-1">
-                <div>
-                  <span className="text-muted-foreground block">{lang === "bn" ? "মোট বকেয়া ও বাকী:" : "Total Dues:"}</span>
-                  <span className="font-medium font-serif">{fmtMoney(p.totalDues)}</span>
-                </div>
-                <div className="text-right">
-                  <span className="text-muted-foreground block">{lang === "bn" ? "মোট জমা (পরিশোধ):" : "Total Paid:"}</span>
-                  <span className="font-medium font-serif text-emerald-600">+{fmtMoney(p.totalPaid)}</span>
-                </div>
-              </div>
+            let cardBorder = "border-border/80";
+            let badgeStyle = "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20";
+            let labelText = lang === "bn" ? "পরিশোধিত" : "Settled";
+            if (isReceivable) {
+              cardBorder = "border-amber-500/25";
+              badgeStyle = "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20";
+              labelText = lang === "bn" ? "পাওনা" : "Receivable";
+            } else if (isPayable) {
+              cardBorder = "border-rose-500/25";
+              badgeStyle = "bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20";
+              labelText = lang === "bn" ? "দেনা" : "Payable";
+            }
 
-              <div className="flex items-center gap-2 pt-1">
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  className="h-8 flex-1 text-xs border-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-500/5 beveled-button"
-                  onClick={() => triggerAddDue(p)}
-                >
-                  <Plus className="size-3 mr-1" />
-                  {lang === "bn" ? "বাকী যোগ" : "Add Due"}
-                </Button>
-                <Button 
-                  size="sm" 
-                  className="h-8 flex-1 text-xs beveled-button bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={() => triggerCollect(p)}
-                >
-                  <Plus className="size-3 mr-1" />
-                  {lang === "bn" ? "টাকা আদায়" : "Collect"}
-                </Button>
-              </div>
-            </Card>
-          ))}
+            return (
+              <Card key={p.id} className={`p-4 flex flex-col justify-between gap-3 bg-card/75 backdrop-blur-sm hover:shadow-md transition-shadow beveled-card ${cardBorder}`}>
+                <div className="space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <Link href={`/parties/${p.id}`} className="font-semibold text-sm hover:text-primary transition-colors hover:underline flex items-center gap-1 group">
+                      {p.name}
+                      <ArrowRight className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </Link>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${badgeStyle}`}>
+                      {fmtMoney(Math.abs(p.outstanding))} ({labelText})
+                    </span>
+                  </div>
+                  {p.phone && <div className="text-xs text-muted-foreground">{p.phone}</div>}
+                </div>
+
+                <div className="text-[10px] grid grid-cols-2 gap-2 py-1.5 border-t border-b border-dashed border-border/70 my-1">
+                  <div>
+                    <span className="text-muted-foreground block">{lang === "bn" ? "মোট বকেয়া ও বাকী:" : "Total Dues:"}</span>
+                    <span className="font-medium font-serif">{fmtMoney(p.totalDues)}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-muted-foreground block">{lang === "bn" ? "মোট জমা (পরিশোধ):" : "Total Paid:"}</span>
+                    <span className="font-medium font-serif text-emerald-600">+{fmtMoney(p.totalPaid)}</span>
+                  </div>
+                </div>
+
+                {p.payableOutstanding > 0 && (
+                  <div className="text-[9px] text-rose-600 font-semibold border-t border-dashed border-border/70 pt-1 -mt-1">
+                    {lang === "bn" ? `মোট দেনা বকেয়া: ${fmtMoney(p.payableOutstanding)}` : `Total Payable Dues: ${fmtMoney(p.payableOutstanding)}`}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 pt-1">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="h-8 flex-1 text-xs border-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-500/5 beveled-button"
+                    onClick={() => triggerAddDue(p)}
+                  >
+                    <Plus className="size-3 mr-1" />
+                    {lang === "bn" ? "বাকী যোগ" : "Add Due"}
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    className="h-8 flex-1 text-xs beveled-button bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => triggerCollect(p)}
+                  >
+                    <Plus className="size-3 mr-1" />
+                    {lang === "bn" ? "টাকা আদায়" : "Collect"}
+                  </Button>
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
 

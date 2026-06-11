@@ -6,6 +6,7 @@ import { hashPassword, comparePassword, signToken, verifyToken } from "@/lib/aut
 import { requireSession } from "@/lib/session";
 import type { PermissionSet } from "@/lib/permissions";
 import { DEFAULT_EMPLOYEE_PERMISSIONS, OWNER_PERMISSIONS } from "@/lib/permissions";
+import { appendRowToGoogleSheet, bulkExportToGoogleSheets } from "@/lib/google-sheets";
 
 type CashboxKind = "deposit" | "withdraw" | "sale" | "expense";
 
@@ -25,6 +26,13 @@ async function insertCashboxEntry(
     created_at: new Date().toISOString(),
   };
   await db.collection("cashbox_entries").insertOne(doc);
+
+  // Sheets Sync
+  appendRowToGoogleSheet(ownerId, "Cashbox",
+    ["ID", "Kind", "Amount", "Note", "Ref ID", "Created At"],
+    [id, entry.kind, entry.amount, entry.note ?? "", entry.ref_id ?? "", doc.created_at]
+  );
+
   return { ...doc, id };
 }
 
@@ -129,6 +137,13 @@ export async function createProductFn(input: { data: { name: string; image_url?:
   const id = crypto.randomUUID();
   const doc = { _id: id, owner_id: session.ownerId, name: data.name, image_url: data.image_url || null, buy_price: data.buy_price || 0, sell_price: data.sell_price || 0, stock: data.stock || 0, attributes: data.attributes || {}, min_stock: data.min_stock ?? 5, category: data.category || "", archived: false, created_at: new Date().toISOString() };
   await db.collection("products").insertOne(doc);
+
+  // Sheets Sync
+  appendRowToGoogleSheet(session.ownerId, "Products",
+    ["ID", "Name", "Buy Price", "Sell Price", "Stock", "Min Stock", "Category", "Created At"],
+    [id, data.name, data.buy_price || 0, data.sell_price || 0, data.stock || 0, data.min_stock ?? 5, data.category || "", doc.created_at]
+  );
+
   return { ...doc, id };
 }
 
@@ -239,6 +254,20 @@ export async function getAllPartyReceivablesFn() {
   return items.map((r) => ({ ...r, id: r._id as string }));
 }
 
+export async function getAllPartyPayablesFn() {
+  const session = await requireSession();
+  const db = await getDb();
+  const items = await db.collection("party_payables").find({ owner_id: session.ownerId }).toArray();
+  return items.map((p) => ({ ...p, id: p._id as string }));
+}
+
+export async function getAllPayableSettlementsFn() {
+  const session = await requireSession();
+  const db = await getDb();
+  const items = await db.collection("party_payable_settlements").find({ owner_id: session.ownerId }).toArray();
+  return items.map((s) => ({ ...s, id: s._id as string }));
+}
+
 export async function getPartyReceivablesFn(input: { data: { partyId: string } }) {
   const { data } = input;
   const session = await requireSession();
@@ -278,6 +307,17 @@ export async function createPayableSettlementFn(input: { data: { party_id: strin
   const id = crypto.randomUUID();
   const doc = { _id: id, owner_id: session.ownerId, party_id: data.party_id, amount: data.amount, note: data.note || null, created_at: new Date().toISOString() };
   await db.collection("party_payable_settlements").insertOne(doc);
+
+  // Also insert cashbox entry when paying a party
+  const party = await db.collection("parties").findOne({ _id: data.party_id, owner_id: session.ownerId });
+  const partyName = party ? (party.name || "Party") : "Party";
+  await insertCashboxEntry(db, session.ownerId, {
+    kind: "withdraw",
+    amount: data.amount,
+    note: data.note || `Paid to ${partyName} (Payable Settlement)`,
+    ref_id: id,
+  });
+
   return { ...doc, id };
 }
 
@@ -326,6 +366,13 @@ export async function createSaleFn(input: { data: { product_id?: string | null; 
       ref_id: id,
     });
   }
+
+  // Sheets Sync
+  appendRowToGoogleSheet(session.ownerId, "Sales",
+    ["ID", "Product Name", "Qty", "Buy Price", "Sell Price", "Profit", "Type", "Party ID", "Paid Amount", "Due Amount", "Created At"],
+    [id, data.product_name, data.qty, data.buy_price, data.sell_price, data.profit, data.type, data.party_id || "", data.paid_amount, data.due_amount, doc.created_at]
+  );
+
   return { ...doc, id };
 }
 
@@ -544,6 +591,13 @@ export async function createPurchaseFn(input: { data: { product_id?: string | nu
       await db.collection("products").updateOne({ _id: data.product_id }, { $set: updates });
     }
   }
+
+  // Sheets Sync
+  appendRowToGoogleSheet(session.ownerId, "Purchases",
+    ["ID", "Product Name", "Qty", "Unit Cost", "Total", "Note", "Created At"],
+    [id, data.product_name, data.qty, data.unit_cost, data.total, data.note || "", doc.created_at]
+  );
+
   return { ...doc, id };
 }
 
@@ -588,6 +642,13 @@ export async function createExpenseFn(input: { data: { title: string; amount: nu
     note: data.title,
     ref_id: id,
   });
+
+  // Sheets Sync
+  appendRowToGoogleSheet(session.ownerId, "Expenses",
+    ["ID", "Title", "Amount", "Note", "Created At"],
+    [id, data.title, data.amount, data.note || "", doc.created_at]
+  );
+
   return { ...doc, id };
 }
 
@@ -624,6 +685,17 @@ export async function createPaymentFn(input: { data: { party_id: string; amount:
   const id = crypto.randomUUID();
   const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
   await db.collection("payments").insertOne(doc);
+
+  // Also insert cashbox entry when party pays
+  const party = await db.collection("parties").findOne({ _id: data.party_id, owner_id: session.ownerId });
+  const partyName = party ? (party.name || "Party") : "Party";
+  await insertCashboxEntry(db, session.ownerId, {
+    kind: "deposit",
+    amount: data.amount,
+    note: data.note || `Collected dues from ${partyName}`,
+    ref_id: id,
+  });
+
   return { ...doc, id };
 }
 
@@ -631,6 +703,7 @@ export async function deletePaymentFn(input: { data: { id: string } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
+  await db.collection("cashbox_entries").deleteMany({ owner_id: session.ownerId, ref_id: data.id });
   await db.collection("payments").deleteOne({ _id: data.id, owner_id: session.ownerId });
   return { success: true };
 }
@@ -772,5 +845,86 @@ export async function deleteReminderFn(input: { data: { id: string } }) {
   const session = await requireSession();
   const db = await getDb();
   await db.collection("reminders").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  return { success: true };
+}
+
+export async function deletePayableSettlementFn(input: { data: { id: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  await db.collection("party_payable_settlements").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  await db.collection("cashbox_entries").deleteMany({ ref_id: data.id, owner_id: session.ownerId });
+  return { success: true };
+}
+
+export async function verifyOwnerPasswordFn(input: { data: { password: string } }) {
+  const session = await requireSession();
+  const db = await getDb();
+  const user = await db.collection("users").findOne({ _id: session.userId });
+  if (!user) throw new Error("User not found");
+  const match = await comparePassword(input.data.password, user.password as string);
+  if (!match) throw new Error("Incorrect password");
+  return { success: true };
+}
+
+export async function emptyCashboxFn() {
+  const session = await requireSession();
+  if (session.role !== "owner") throw new Error("Only owner can reset data");
+  const db = await getDb();
+  await db.collection("cashbox_entries").deleteMany({ owner_id: session.ownerId });
+  return { success: true };
+}
+
+export async function resetProductsFn() {
+  const session = await requireSession();
+  if (session.role !== "owner") throw new Error("Only owner can reset data");
+  const db = await getDb();
+  await db.collection("products").deleteMany({ owner_id: session.ownerId });
+  return { success: true };
+}
+
+export async function resetSalesFn() {
+  const session = await requireSession();
+  if (session.role !== "owner") throw new Error("Only owner can reset data");
+  const db = await getDb();
+  await db.collection("sales").deleteMany({ owner_id: session.ownerId });
+  await db.collection("returns").deleteMany({ owner_id: session.ownerId });
+  return { success: true };
+}
+
+export async function resetPurchasesFn() {
+  const session = await requireSession();
+  if (session.role !== "owner") throw new Error("Only owner can reset data");
+  const db = await getDb();
+  await db.collection("purchases").deleteMany({ owner_id: session.ownerId });
+  return { success: true };
+}
+
+export async function resetAllDataFn() {
+  const session = await requireSession();
+  if (session.role !== "owner") throw new Error("Only owner can reset data");
+  const db = await getDb();
+  const ownerId = session.ownerId;
+  await db.collection("products").deleteMany({ owner_id: ownerId });
+  await db.collection("sales").deleteMany({ owner_id: ownerId });
+  await db.collection("returns").deleteMany({ owner_id: ownerId });
+  await db.collection("purchases").deleteMany({ owner_id: ownerId });
+  await db.collection("cashbox_entries").deleteMany({ owner_id: ownerId });
+  await db.collection("expenses").deleteMany({ owner_id: ownerId });
+  await db.collection("somiti_entries").deleteMany({ owner_id: ownerId });
+  await db.collection("owner_withdrawals").deleteMany({ owner_id: ownerId });
+  await db.collection("parties").deleteMany({ owner_id: ownerId });
+  await db.collection("payments").deleteMany({ owner_id: ownerId });
+  await db.collection("party_receivables").deleteMany({ owner_id: ownerId });
+  await db.collection("party_payables").deleteMany({ owner_id: ownerId });
+  await db.collection("party_payable_settlements").deleteMany({ owner_id: ownerId });
+  await db.collection("reminders").deleteMany({ owner_id: ownerId });
+  return { success: true };
+}
+
+export async function bulkExportToGoogleSheetsFn() {
+  const session = await requireSession();
+  if (session.role !== "owner") throw new Error("Only owner can export data");
+  await bulkExportToGoogleSheets(session.ownerId);
   return { success: true };
 }

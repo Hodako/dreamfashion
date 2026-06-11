@@ -399,6 +399,8 @@ export async function getBusinessSettingsFn() {
       invoice_watermark_enabled: Boolean(business.invoice_watermark_enabled),
       invoice_terms: (business.invoice_terms as string) || "",
       invoice_color: (business.invoice_color as string) || "black",
+      google_sheets_spreadsheet_id: (business.google_sheets_spreadsheet_id as string) || "",
+      google_sheets_credentials_json: (business.google_sheets_credentials_json as string) || "",
     } : null,
     role: session.role,
     permissions: session.permissions,
@@ -429,6 +431,8 @@ export async function updateBusinessSettingsFn(input: {
     invoice_watermark_enabled?: boolean;
     invoice_terms?: string;
     invoice_color?: string;
+    google_sheets_spreadsheet_id?: string;
+    google_sheets_credentials_json?: string;
   }
 }) {
   const { data } = input;

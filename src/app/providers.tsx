@@ -7,6 +7,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { AuthProvider } from "@/hooks/use-auth";
 import { Toaster } from "@/components/ui/sonner";
 import { SpeedLoader } from "@/components/speed-loader";
+import { CustomThemeManager } from "@/components/custom-theme-manager";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -35,6 +36,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <ThemeProvider>
         <I18nProvider>
           <AuthProvider>
+            <CustomThemeManager />
             {children}
             <Toaster richColors position="top-center" />
           </AuthProvider>

@@ -18,13 +18,31 @@ import {
   updateEmployeePermissionsFn,
   deleteLicenseFn,
 } from "@/lib/rpc-admin";
-import { Trash2 } from "lucide-react";
+import { Trash2, Lock, Unlock, ShieldAlert, Database, FileSpreadsheet, Key, RefreshCw, AlertTriangle } from "lucide-react";
 import type { PermissionSet } from "@/lib/permissions";
 import { DEFAULT_EMPLOYEE_PERMISSIONS } from "@/lib/permissions";
-import { uploadImageFn } from "@/lib/rpc";
+import {
+  uploadImageFn,
+  verifyOwnerPasswordFn,
+  emptyCashboxFn,
+  resetProductsFn,
+  resetSalesFn,
+  resetPurchasesFn,
+  resetAllDataFn,
+  bulkExportToGoogleSheetsFn,
+} from "@/lib/rpc";
 import { useTheme, type ThemeMode, type AccentColor, type BgStyle } from "@/hooks/use-theme";
 import { SpeedLoader } from "@/components/speed-loader";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 
 
@@ -39,8 +57,107 @@ export default function SettingsPage() {
   const settings = useQuery({ queryKey: ["business-settings"], queryFn: getBusinessSettingsFn });
   const [busy, setBusy] = useState(false);
 
+  // Safety settings states
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [isUnlockDialogOpen, setIsUnlockDialogOpen] = useState(false);
+  const [unlockPassword, setUnlockPassword] = useState("");
+  const [unlockLoading, setUnlockLoading] = useState(false);
+
+  // Sheets sync states
+  const [isSheetsSaving, setIsSheetsSaving] = useState(false);
+  const [isBulkExporting, setIsBulkExporting] = useState(false);
+
+  // Reset states
+  const [resetType, setResetType] = useState<"cashbox" | "products" | "sales" | "purchases" | "all" | null>(null);
+  const [confirmText, setConfirmText] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+
   const biz = settings.data?.business;
   const isOwner = settings.data?.role === "owner";
+
+  async function handleVerifyPassword(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setUnlockLoading(true);
+    try {
+      await verifyOwnerPasswordFn({ data: { password: unlockPassword } });
+      setIsUnlocked(true);
+      setIsUnlockDialogOpen(false);
+      setUnlockPassword("");
+      toast.success("Safety settings unlocked successfully!");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Incorrect owner password.");
+    } finally {
+      setUnlockLoading(false);
+    }
+  }
+
+  async function saveGoogleSheetsConfig(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!isOwner) return;
+    const fd = new FormData(e.currentTarget);
+    setIsSheetsSaving(true);
+    try {
+      await updateBusinessSettingsFn({
+        data: {
+          google_sheets_spreadsheet_id: String(fd.get("google_sheets_spreadsheet_id") || "").trim(),
+          google_sheets_credentials_json: String(fd.get("google_sheets_credentials_json") || "").trim(),
+        },
+      });
+      qc.invalidateQueries({ queryKey: ["business-settings"] });
+      toast.success("Google Sheets config saved successfully!");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSheetsSaving(false);
+    }
+  }
+
+  async function handleBulkExport() {
+    if (!isOwner) return;
+    setIsBulkExporting(true);
+    try {
+      await bulkExportToGoogleSheetsFn();
+      toast.success("Successfully synchronized all data to Google Sheets!");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsBulkExporting(false);
+    }
+  }
+
+  async function handleResetAction() {
+    if (!resetType || !isOwner) return;
+    if (confirmText !== "CONFIRM") {
+      toast.error("Please type CONFIRM to authorize the reset.");
+      return;
+    }
+    setResetLoading(true);
+    try {
+      if (resetType === "cashbox") {
+        await emptyCashboxFn();
+        toast.success("Cashbox entries emptied successfully!");
+      } else if (resetType === "products") {
+        await resetProductsFn();
+        toast.success("Products data reset successfully!");
+      } else if (resetType === "sales") {
+        await resetSalesFn();
+        toast.success("Sales and Returns data reset successfully!");
+      } else if (resetType === "purchases") {
+        await resetPurchasesFn();
+        toast.success("Purchases data reset successfully!");
+      } else if (resetType === "all") {
+        await resetAllDataFn();
+        toast.success("All business data reset to factory settings!");
+      }
+      qc.invalidateQueries({ queryKey: ["business-settings"] });
+      setResetType(null);
+      setConfirmText("");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setResetLoading(false);
+    }
+  }
 
   async function saveBusiness(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -196,54 +313,150 @@ export default function SettingsPage() {
           </form>
         </Card>
 
-        <Card className="glass-card p-5 space-y-4">
-          <h2 className="font-semibold">Employee Licenses</h2>
-          <p className="text-xs text-muted-foreground">1 license = 1 employee. Share key during their signup activation.</p>
-          <Button
-            size="sm"
-            onClick={async () => {
-              try {
-                const res = await createEmployeeLicenseFn({ data: { permissions: DEFAULT_EMPLOYEE_PERMISSIONS } });
-                toast.success(`Employee key: ${res.key}`);
-                qc.invalidateQueries({ queryKey: ["business-settings"] });
-              } catch (err: unknown) {
-                toast.error(err instanceof Error ? err.message : String(err));
-              }
-            }}
-          >
-            Generate Employee License
-          </Button>
-          <div className="divide-y divide-border rounded-md border overflow-hidden">
-            {(settings.data?.employeeLicenses ?? []).map(l => (
-              <div key={l.id} className="p-2 flex items-center justify-between gap-2 text-xs">
-                <code className="font-mono truncate">{l.id}</code>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={l.used ? "text-muted-foreground" : "text-success"}>{l.used ? "Used" : "Open"}</span>
-                  {!l.used && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-6 text-destructive"
-                      aria-label={t("delete_license")}
-                      onClick={async () => {
-                        try {
-                          await deleteLicenseFn({ data: { licenseKey: l.id } });
-                          qc.invalidateQueries({ queryKey: ["business-settings"] });
-                          toast.success(t("delete_license"));
-                        } catch (err: unknown) {
-                          toast.error(err instanceof Error ? err.message : String(err));
-                        }
-                      }}
-                    >
-                      <Trash2 className="size-3" />
-                    </Button>
-                  )}
+          {!isUnlocked ? (
+            <Card className="glass-card p-5 space-y-4 border-amber-500/20 bg-amber-500/5 relative overflow-hidden flex flex-col justify-between min-h-[350px]">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="space-y-4 flex-1 flex flex-col justify-center">
+                <div className="flex items-center gap-3 text-amber-500">
+                  <div className="p-2 bg-amber-500/10 rounded-lg">
+                    <Lock className="size-6 animate-pulse" />
+                  </div>
+                  <h2 className="font-semibold text-lg">Safety & API Settings</h2>
+                </div>
+                <p className="text-sm text-muted-foreground mt-3 leading-relaxed">
+                  Configure Google Sheets integration, generate employee license keys, and perform data resets. Password verification is required.
+                </p>
+                <div className="flex items-start gap-2.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 p-3 rounded-lg border border-amber-500/20 mt-4">
+                  <ShieldAlert className="size-4 shrink-0 mt-0.5" />
+                  <span>Only the business owner can access safety controls. Access is locked by default.</span>
                 </div>
               </div>
-            ))}
-          </div>
-        </Card>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full mt-6 border-amber-500/30 hover:bg-amber-500/10 text-amber-700 dark:text-amber-300 font-medium"
+                onClick={() => setIsUnlockDialogOpen(true)}
+              >
+                Unlock Safety Settings
+              </Button>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              <Card className="glass-card p-5 space-y-4 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+                <div className="flex items-center gap-2.5 text-emerald-500">
+                  <FileSpreadsheet className="size-5" />
+                  <h2 className="font-semibold">Google Sheets Integration</h2>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Synchronize your transactions, products, sales, expenses, and purchases to Google Sheets in real-time.
+                </p>
+                <form onSubmit={saveGoogleSheetsConfig} className="space-y-3.5">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Spreadsheet ID</Label>
+                    <Input
+                      name="google_sheets_spreadsheet_id"
+                      defaultValue={biz.google_sheets_spreadsheet_id}
+                      placeholder="e.g. 1a2b3c4d5e6f7g..."
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Service Account Credentials JSON</Label>
+                    <Textarea
+                      name="google_sheets_credentials_json"
+                      defaultValue={biz.google_sheets_credentials_json}
+                      placeholder='{ "type": "service_account", ... }'
+                      className="font-mono text-xs min-h-[100px] h-[120px] bg-transparent"
+                    />
+                  </div>
+                  <div className="flex gap-2.5 pt-1">
+                    <Button type="submit" disabled={isSheetsSaving} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                      {isSheetsSaving ? "Saving..." : "Save Config"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleBulkExport}
+                      disabled={isBulkExporting || !biz.google_sheets_spreadsheet_id || !biz.google_sheets_credentials_json}
+                      size="sm"
+                      className="border-emerald-600/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+                    >
+                      {isBulkExporting ? (
+                        <>
+                          <RefreshCw className="size-3.5 mr-1.5 animate-spin" />
+                          Syncing...
+                        </>
+                      ) : (
+                        "Sync All Existing Data"
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </Card>
+
+              <Card className="glass-card p-5 space-y-4">
+                <div className="flex items-center gap-2.5 text-blue-500">
+                  <Key className="size-5" />
+                  <h2 className="font-semibold">Employee Licenses</h2>
+                </div>
+                <p className="text-xs text-muted-foreground">1 license = 1 employee. Share the generated key during their signup/activation.</p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="bg-blue-600/10 text-blue-600 dark:bg-blue-600/20 dark:text-blue-400 hover:bg-blue-600/20"
+                  onClick={async () => {
+                    try {
+                      const res = await createEmployeeLicenseFn({ data: { permissions: DEFAULT_EMPLOYEE_PERMISSIONS } });
+                      toast.success(`Employee key generated: ${res.key}`);
+                      qc.invalidateQueries({ queryKey: ["business-settings"] });
+                    } catch (err: unknown) {
+                      toast.error(err instanceof Error ? err.message : String(err));
+                    }
+                  }}
+                >
+                  Generate Employee License
+                </Button>
+                <div className="divide-y divide-border rounded-md border overflow-hidden bg-background/50 max-h-[200px] overflow-y-auto">
+                  {(settings.data?.employeeLicenses ?? []).length === 0 ? (
+                    <div className="p-3 text-center text-xs text-muted-foreground">No license keys generated yet.</div>
+                  ) : (
+                    (settings.data?.employeeLicenses ?? []).map(l => (
+                      <div key={l.id} className="p-2 flex items-center justify-between gap-2 text-xs">
+                        <code className="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px] truncate">{l.id}</code>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={l.used ? "text-muted-foreground" : "text-emerald-500 font-semibold"}>
+                            {l.used ? "Used" : "Open"}
+                          </span>
+                          {!l.used && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-6 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              aria-label={t("delete_license")}
+                              onClick={async () => {
+                                try {
+                                  await deleteLicenseFn({ data: { licenseKey: l.id } });
+                                  qc.invalidateQueries({ queryKey: ["business-settings"] });
+                                  toast.success("License deleted");
+                                } catch (err: unknown) {
+                                  toast.error(err instanceof Error ? err.message : String(err));
+                                }
+                              }}
+                            >
+                              <Trash2 className="size-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </Card>
+            </div>
+          )}
         </div>
       )}
 
@@ -266,11 +479,205 @@ export default function SettingsPage() {
         </Card>
       )}
 
+      {isOwner && isUnlocked && (
+        <Card className="glass-card p-5 space-y-4 border-red-500/20 bg-red-500/5 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-3xl pointer-events-none" />
+          <div className="flex items-center gap-2.5 text-red-500">
+            <ShieldAlert className="size-5 animate-pulse" />
+            <h2 className="font-semibold text-lg">Danger Zone</h2>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Perform administrative resets on specific modules or clear all data. These actions are irreversible and will affect both local and synced spreadsheet data.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 pt-2">
+            <div className="p-3.5 rounded-lg border border-border bg-background/40 flex flex-col justify-between space-y-3">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cashbox</h3>
+                <p className="text-[11px] text-muted-foreground mt-1">Delete all cash inflow/outflow history and reset balance to 0.</p>
+              </div>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="w-full bg-red-600/10 text-red-600 hover:bg-red-600 hover:text-white"
+                onClick={() => {
+                  setResetType("cashbox");
+                  setConfirmText("");
+                }}
+              >
+                Reset Cashbox
+              </Button>
+            </div>
+
+            <div className="p-3.5 rounded-lg border border-border bg-background/40 flex flex-col justify-between space-y-3">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Products</h3>
+                <p className="text-[11px] text-muted-foreground mt-1">Clear catalog list, categories, stock levels, and item configurations.</p>
+              </div>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="w-full bg-red-600/10 text-red-600 hover:bg-red-600 hover:text-white"
+                onClick={() => {
+                  setResetType("products");
+                  setConfirmText("");
+                }}
+              >
+                Reset Products
+              </Button>
+            </div>
+
+            <div className="p-3.5 rounded-lg border border-border bg-background/40 flex flex-col justify-between space-y-3">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sales & Returns</h3>
+                <p className="text-[11px] text-muted-foreground mt-1">Delete all invoice histories, returns records, and customer sale logs.</p>
+              </div>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="w-full bg-red-600/10 text-red-600 hover:bg-red-600 hover:text-white"
+                onClick={() => {
+                  setResetType("sales");
+                  setConfirmText("");
+                }}
+              >
+                Reset Sales
+              </Button>
+            </div>
+
+            <div className="p-3.5 rounded-lg border border-border bg-background/40 flex flex-col justify-between space-y-3">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Purchases</h3>
+                <p className="text-[11px] text-muted-foreground mt-1">Delete all purchase records, stock intakes, and supplier purchases logs.</p>
+              </div>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="w-full bg-red-600/10 text-red-600 hover:bg-red-600 hover:text-white"
+                onClick={() => {
+                  setResetType("purchases");
+                  setConfirmText("");
+                }}
+              >
+                Reset Purchases
+              </Button>
+            </div>
+
+            <div className="p-3.5 rounded-lg border border-red-500/20 bg-red-500/10 flex flex-col justify-between space-y-3 sm:col-span-2 md:col-span-1">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-red-600 dark:text-red-400">Factory Reset</h3>
+                <p className="text-[11px] text-muted-foreground mt-1">Reset everything. Wipes all data: products, sales, purchases, parties, expenses, cashbox, and more.</p>
+              </div>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="w-full bg-red-600 text-white hover:bg-red-700"
+                onClick={() => {
+                  setResetType("all");
+                  setConfirmText("");
+                }}
+              >
+                Factory Reset All Data
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {!isOwner && (
         <Card className="glass-card p-5 text-sm text-muted-foreground max-w-2xl">
           Employee account — contact your business owner for settings changes.
         </Card>
       )}
+
+      {/* Password Verification Dialog */}
+      <Dialog open={isUnlockDialogOpen} onOpenChange={setIsUnlockDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Unlock className="size-5 text-amber-500" />
+              Verify Owner Password
+            </DialogTitle>
+            <DialogDescription>
+              Please enter your login password to unlock Safety & API settings.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleVerifyPassword} className="space-y-4 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Password</Label>
+              <Input
+                type="password"
+                required
+                value={unlockPassword}
+                onChange={e => setUnlockPassword(e.target.value)}
+                placeholder="Enter owner password"
+                className="text-sm"
+              />
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setIsUnlockDialogOpen(false)} disabled={unlockLoading}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={unlockLoading}>
+                {unlockLoading ? "Verifying..." : "Verify & Unlock"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Double Confirmation Reset Dialog */}
+      <Dialog open={resetType !== null} onOpenChange={open => !open && setResetType(null)}>
+        <DialogContent className="max-w-md border-red-500/20 bg-background">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <AlertTriangle className="size-5" />
+              Confirm Data Reset
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              This action is <span className="font-semibold text-red-500">permanent</span>. All selected files and entries will be deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="text-xs text-muted-foreground leading-relaxed">
+              You are about to reset:{" "}
+              <span className="font-bold text-foreground capitalize">
+                {resetType === "all" ? "All Business Data (Factory Reset)" : resetType}
+              </span>.
+              This will erase all related database records for your business.
+            </div>
+            <div className="space-y-2 bg-red-500/5 p-3 rounded-lg border border-red-500/10 text-[11px] text-red-700 dark:text-red-400">
+              Please type <strong className="font-mono bg-red-500/20 px-1 py-0.5 rounded text-xs select-all text-red-600 dark:text-red-300">CONFIRM</strong> in the box below to authorize the deletion.
+            </div>
+            <div className="space-y-1">
+              <Input
+                value={confirmText}
+                onChange={e => setConfirmText(e.target.value)}
+                placeholder="Type CONFIRM here"
+                className="text-sm text-center font-bold tracking-wider"
+                autoFocus
+              />
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button type="button" variant="outline" onClick={() => setResetType(null)} disabled={resetLoading}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={confirmText !== "CONFIRM" || resetLoading}
+                onClick={handleResetAction}
+              >
+                {resetLoading ? "Deleting..." : "Erase Data"}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

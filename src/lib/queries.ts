@@ -10,6 +10,8 @@ import {
   getPaymentsForPartyFn,
   getAllPaymentsFn,
   getAllPartyReceivablesFn,
+  getAllPartyPayablesFn,
+  getAllPayableSettlementsFn,
   getPartyReceivablesFn,
   getPartyPayablesFn,
   getPayableSettlementsFn,
@@ -82,6 +84,8 @@ export const getSalesForParty = (partyId: string) => getSalesForPartyFn({ data: 
 export const getPaymentsForParty = (partyId: string) => getPaymentsForPartyFn({ data: { partyId } }) as Promise<Payment[]>;
 export const getAllPayments = () => getAllPaymentsFn() as Promise<Payment[]>;
 export const getAllPartyReceivables = () => getAllPartyReceivablesFn() as Promise<PartyLedger[]>;
+export const getAllPartyPayables = () => getAllPartyPayablesFn() as Promise<PartyLedger[]>;
+export const getAllPayableSettlements = () => getAllPayableSettlementsFn() as Promise<PartyLedger[]>;
 export const getPartyReceivables = (partyId: string) => getPartyReceivablesFn({ data: { partyId } }) as Promise<PartyLedger[]>;
 export const getPartyPayables = (partyId: string) => getPartyPayablesFn({ data: { partyId } }) as Promise<PartyLedger[]>;
 export const getPayableSettlements = (partyId: string) => getPayableSettlementsFn({ data: { partyId } }) as Promise<PartyLedger[]>;
