@@ -9,6 +9,7 @@ import {
   Home, Package, ShoppingBag, Users, MoreHorizontal,
   LogOut, Languages, Banknote, DollarSign, Settings,
   BarChart3, Receipt, PiggyBank, ShoppingCart, Moon, Sun, FileText,
+  TrendingUp,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useT } from "@/lib/i18n";
@@ -49,6 +50,7 @@ const desktopNavGroups: NavGroup[] = [
       { to: "/products", labelKey: "products", icon: Package, perm: "products" },
       { to: "/sales", labelKey: "sales", icon: ShoppingBag, perm: "sales" },
       { to: "/parties", labelKey: "parties", icon: Users, perm: "parties" },
+      { to: "/dues", labelKey: "due", icon: Banknote, perm: "parties" },
     ],
   },
   {
@@ -65,6 +67,7 @@ const desktopNavGroups: NavGroup[] = [
   {
     labelKey: "reports",
     items: [
+      { to: "/profit", labelKey: "profit", icon: TrendingUp, perm: "reports" },
       { to: "/trackback", labelKey: "trackback", icon: BarChart3, perm: "reports" },
       { to: "/purchase-reports", labelKey: "products_buy", icon: ShoppingCart, perm: "reports" },
       { to: "/settings", labelKey: "settings", icon: Settings, perm: "settings" },
@@ -158,9 +161,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isEmployee = user.role === "employee";
   const sidebarGroups = filterGroups(desktopNavGroups, perms).map(group => ({
     ...group,
-    items: group.items.filter(item => !(isEmployee && (item.to === "/somiti" || item.to === "/parties")))
+    items: group.items.filter(item => !(isEmployee && (item.to === "/somiti" || item.to === "/parties" || item.to === "/dues")))
   })).filter(group => group.items.length > 0);
-  const bottomNav = filterNav(mobileNav, perms).filter(item => !(isEmployee && (item.to === "/somiti" || item.to === "/parties")));
+  const bottomNav = filterNav(mobileNav, perms).filter(item => !(isEmployee && (item.to === "/somiti" || item.to === "/parties" || item.to === "/dues")));
   const brandName = user.business_name || "HakimEzy";
   const userInitials = user.email?.slice(0, 2).toUpperCase() ?? "HZ";
 

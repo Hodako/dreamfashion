@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   ShoppingCart, Receipt, PiggyBank, DollarSign,
   Banknote, BarChart3, Settings, FileText,
-  LogOut
+  LogOut, TrendingUp
 } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { useAuth } from "@/hooks/use-auth";
@@ -18,6 +18,7 @@ const businessLinks = [
   { to: "/invoices",       labelKey: "invoice_generator", desc: "Create & customize invoices", icon: FileText,     perm: "sales"      as const },
   { to: "/purchases",      labelKey: "new_purchase",    desc: "Log product inventory buys", icon: ShoppingCart, perm: "purchases"  as const },
   { to: "/online-sells",   labelKey: "online_sell",     desc: "Track web and online sales", icon: DollarSign,   perm: "sales"      as const },
+  { to: "/dues",           labelKey: "due",             desc: "Total customer outstanding dues", icon: Banknote, perm: "parties"    as const },
   { to: "/settings",       labelKey: "settings",        desc: "Business profile & settings", icon: Settings,     perm: "settings"   as const },
 ] as const;
 
@@ -25,6 +26,7 @@ const financeLinks = [
   { to: "/expenses",       labelKey: "expenses",        desc: "Record overhead expenses", icon: Receipt,      perm: "expenses"   as const },
   { to: "/somiti",         labelKey: "somiti",          desc: "Manage Somiti accounts", icon: PiggyBank,    perm: "expenses"   as const },
   { to: "/cash-management",labelKey: "cash_management", desc: "Cashbox ledger & cashflow", icon: Banknote,     perm: "expenses"   as const },
+  { to: "/profit",         labelKey: "profit",          desc: "Sales margins & net profits", icon: TrendingUp,  perm: "reports"    as const },
   { to: "/trackback",      labelKey: "trackback",       desc: "Comparative metrics chart", icon: BarChart3,    perm: "reports"    as const },
 ] as const;
 
