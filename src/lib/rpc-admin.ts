@@ -90,7 +90,188 @@ export async function listBusinessesFn() {
   await requireSuperAdminSession();
   const db = await getDb();
   const items = await db.collection("businesses").find({}).sort({ created_at: -1 }).limit(100).toArray();
-  return items.map(b => ({ ...b, id: b._id as string }));
+  
+  const ownerIds = items.map(b => b.owner_id);
+  const owners = await db.collection("users").find({ _id: { $in: ownerIds } }).toArray();
+  const ownerMap = new Map(owners.map(u => [u._id, u.email]));
+
+  const results = [];
+  for (const b of items) {
+    const ownerId = b.owner_id;
+    const productCount = await db.collection("products").countDocuments({ owner_id: ownerId });
+    const saleCount = await db.collection("sales").countDocuments({ owner_id: ownerId });
+    results.push({
+      ...b,
+      id: b._id as string,
+      owner_email: ownerMap.get(ownerId) || "No owner email",
+      product_count: productCount,
+      sale_count: saleCount,
+      status: (b.status as string) || "active",
+    });
+  }
+  return results;
+}
+
+export async function getPlatformStatsFn() {
+  await requireSuperAdminSession();
+  const db = await getDb();
+  
+  const totalBusinesses = await db.collection("businesses").countDocuments({});
+  const totalUsers = await db.collection("users").countDocuments({});
+  const totalLicenses = await db.collection("licenses").countDocuments({});
+  const totalProducts = await db.collection("products").countDocuments({});
+  
+  const salesSum = await db.collection("sales").aggregate([
+    {
+      $group: {
+        _id: null,
+        totalSales: { $sum: { $multiply: ["$sell_price", "$qty"] } },
+        totalProfit: { $sum: "$profit" }
+      }
+    }
+  ]).toArray();
+  
+  const expenseSum = await db.collection("expenses").aggregate([
+    {
+      $group: {
+        _id: null,
+        totalExpense: { $sum: "$amount" }
+      }
+    }
+  ]).toArray();
+  
+  const totalSalesVolume = salesSum[0]?.totalSales || 0;
+  const totalSalesProfit = salesSum[0]?.totalProfit || 0;
+  const totalExpenseVolume = expenseSum[0]?.totalExpense || 0;
+  const totalPlatformNetProfit = totalSalesProfit - totalExpenseVolume;
+
+  return {
+    totalBusinesses,
+    totalUsers,
+    totalLicenses,
+    totalProducts,
+    totalSalesVolume,
+    totalExpenseVolume,
+    totalPlatformNetProfit,
+  };
+}
+
+export async function getPlatformActivitiesFn() {
+  await requireSuperAdminSession();
+  const db = await getDb();
+
+  const allBiz = await db.collection("businesses").find({}).toArray();
+  const ownerToBiz: Record<string, string> = {};
+  const idToBiz: Record<string, string> = {};
+  for (const b of allBiz) {
+    ownerToBiz[b.owner_id as string] = (b.name as string) || "Unknown Business";
+    idToBiz[b._id as string] = (b.name as string) || "Unknown Business";
+  }
+
+  const recentSales = await db.collection("sales").find({}).sort({ created_at: -1 }).limit(30).toArray();
+  const recentProducts = await db.collection("products").find({}).sort({ created_at: -1 }).limit(30).toArray();
+  const recentExpenses = await db.collection("expenses").find({}).sort({ created_at: -1 }).limit(30).toArray();
+  const recentBusinesses = await db.collection("businesses").find({}).sort({ created_at: -1 }).limit(30).toArray();
+  const recentUsers = await db.collection("users").find({}).sort({ created_at: -1 }).limit(30).toArray();
+
+  const events: any[] = [];
+
+  for (const s of recentSales) {
+    events.push({
+      id: s._id,
+      type: "sale",
+      title: "Sale Logged",
+      detail: `${s.product_name} (${s.qty} pcs) - ৳${(s.sell_price * s.qty).toLocaleString()}`,
+      time: s.created_at,
+      businessName: ownerToBiz[s.owner_id as string] || "Unknown Business",
+    });
+  }
+
+  for (const p of recentProducts) {
+    events.push({
+      id: p._id,
+      type: "product",
+      title: "Product Added",
+      detail: `${p.name} (Selling Price: ৳${(p.sell_price || 0).toLocaleString()})`,
+      time: p.created_at,
+      businessName: ownerToBiz[p.owner_id as string] || "Unknown Business",
+    });
+  }
+
+  for (const e of recentExpenses) {
+    events.push({
+      id: e._id,
+      type: "expense",
+      title: "Expense Logged",
+      detail: `${e.title} - ৳${(e.amount || 0).toLocaleString()}`,
+      time: e.created_at,
+      businessName: ownerToBiz[e.owner_id as string] || "Unknown Business",
+    });
+  }
+
+  for (const b of recentBusinesses) {
+    events.push({
+      id: b._id,
+      type: "business",
+      title: "Business Registered",
+      detail: `${b.name} (${b.business_type || "retail"})`,
+      time: b.created_at,
+      businessName: b.name || "Unknown Business",
+    });
+  }
+
+  for (const u of recentUsers) {
+    if (u._id === "superadmin") continue;
+    events.push({
+      id: u._id,
+      type: "user",
+      title: u.role === "owner" ? "Owner Registered" : "Employee Registered",
+      detail: `${u.full_name || u.email} (${u.email})`,
+      time: u.created_at || u.activated_at || new Date().toISOString(),
+      businessName: idToBiz[u.business_id as string] || "Pending Activation",
+    });
+  }
+
+  events.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+
+  return events.slice(0, 50);
+}
+
+export async function suspendBusinessFn(input: { data: { businessId: string; suspend: boolean } }) {
+  const { data } = input;
+  await requireSuperAdminSession();
+  const db = await getDb();
+  await db.collection("businesses").updateOne(
+    { _id: data.businessId },
+    { $set: { status: data.suspend ? "suspended" : "active" } }
+  );
+  return { success: true };
+}
+
+export async function deleteBusinessFn(input: { data: { businessId: string } }) {
+  const { data } = input;
+  await requireSuperAdminSession();
+  const db = await getDb();
+
+  const biz = await db.collection("businesses").findOne({ _id: data.businessId });
+  if (!biz) throw new Error("Business not found");
+
+  const ownerId = biz.owner_id;
+
+  await db.collection("users").deleteMany({ business_id: data.businessId });
+  await db.collection("products").deleteMany({ owner_id: ownerId });
+  await db.collection("sales").deleteMany({ owner_id: ownerId });
+  await db.collection("purchases").deleteMany({ owner_id: ownerId });
+  await db.collection("cashbox_entries").deleteMany({ owner_id: ownerId });
+  await db.collection("expenses").deleteMany({ owner_id: ownerId });
+  await db.collection("somiti_entries").deleteMany({ owner_id: ownerId });
+  await db.collection("owner_withdrawals").deleteMany({ owner_id: ownerId });
+  await db.collection("parties").deleteMany({ owner_id: ownerId });
+  await db.collection("reminders").deleteMany({ owner_id: ownerId });
+  await db.collection("licenses").deleteMany({ business_id: data.businessId });
+  await db.collection("businesses").deleteOne({ _id: data.businessId });
+
+  return { success: true };
 }
 
 // ─── User activation & licenses ──────────────────────────────────────────────

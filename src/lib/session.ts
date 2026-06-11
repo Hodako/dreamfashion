@@ -29,6 +29,14 @@ export async function requireSession(requireActivated = true): Promise<AppSessio
   const activated = user.activated === false ? false : Boolean(user.activated ?? true);
   if (requireActivated && !activated) throw new Error("Account not activated");
 
+  const businessId = (user.business_id as string) || null;
+  if (businessId) {
+    const biz = await db.collection("businesses").findOne({ _id: businessId });
+    if (biz && biz.status === "suspended") {
+      throw new Error("Business suspended. Please contact administrator.");
+    }
+  }
+
   const ownerId = role === "employee" ? (user.owner_id as string) : (user._id as string);
   const permissions = (user.permissions as PermissionSet) || (role === "owner" ? OWNER_PERMISSIONS : {});
 
@@ -37,7 +45,7 @@ export async function requireSession(requireActivated = true): Promise<AppSessio
     ownerId,
     email: user.email as string,
     role,
-    businessId: (user.business_id as string) || null,
+    businessId,
     activated,
     permissions: role === "owner" ? OWNER_PERMISSIONS : permissions,
   };
