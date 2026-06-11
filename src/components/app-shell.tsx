@@ -8,7 +8,7 @@ import { getProducts, getParties, getSales } from "@/lib/queries";
 import {
   Home, Package, ShoppingBag, Users, MoreHorizontal,
   LogOut, Languages, Banknote, DollarSign, Settings,
-  BarChart3, Receipt, PiggyBank, ShoppingCart, Moon, Sun,
+  BarChart3, Receipt, PiggyBank, ShoppingCart, Moon, Sun, FileText,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useT } from "@/lib/i18n";
@@ -19,7 +19,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AppLogo } from "@/components/app-logo";
 import { SpeedLoader } from "@/components/speed-loader";
 import { UniversalSearch } from "@/components/universal-search";
-import { BuySellOverlay } from "@/components/buy-sell-overlay";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -35,7 +34,7 @@ import { PermissionGuard } from "@/components/permission-guard";
 
 type NavItem = {
   to: string;
-  labelKey: "home" | "products" | "sales" | "parties" | "settings" | "more" | "online_sell" | "cash_management" | "trackback" | "expenses" | "somiti" | "new_purchase";
+  labelKey: "home" | "products" | "sales" | "parties" | "settings" | "more" | "online_sell" | "cash_management" | "trackback" | "expenses" | "somiti" | "new_purchase" | "invoice_generator";
   icon: React.ElementType;
   perm?: keyof PermissionSet;
 };
@@ -55,6 +54,7 @@ const desktopNavGroups: NavGroup[] = [
   {
     labelKey: "more",
     items: [
+      { to: "/invoices", labelKey: "invoice_generator", icon: FileText, perm: "sales" },
       { to: "/purchases", labelKey: "new_purchase", icon: ShoppingCart, perm: "purchases" },
       { to: "/expenses", labelKey: "expenses", icon: Receipt, perm: "expenses" },
       { to: "/somiti", labelKey: "somiti", icon: PiggyBank, perm: "expenses" },
@@ -273,8 +273,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {isMobile && <div className="mobile-bottom-spacer" aria-hidden />}
         </main>
       </div>
-
-      {isMobile && <BuySellOverlay />}
 
       {isMobile && bottomNav.length > 0 && (
         <nav className="fixed bottom-0 inset-x-0 z-40 bg-card/92 backdrop-blur-lg border-t border-border/50 safe-area-pb mobile-tab-bar" style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 0px)" }}>

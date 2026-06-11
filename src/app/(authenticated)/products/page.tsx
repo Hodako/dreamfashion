@@ -3,11 +3,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import { PaginationBar, paginate } from "@/components/ui/pagination-bar";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Plus, Pencil, Trash2, Search, Archive, Download, Eye, AlertCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Archive, Download, Eye, AlertCircle, MoreVertical, ShoppingCart, Minus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { getProducts, type Product } from "@/lib/queries";
+import { getProducts, getSales, type Product } from "@/lib/queries";
 import { useT } from "@/lib/i18n";
 import { fmtMoney } from "@/lib/format";
 import { ProductImage } from "@/components/product-image";
@@ -20,12 +20,20 @@ import { toast } from "sonner";
 import { deleteProductFn, archiveProductFn } from "@/lib/rpc";
 import { downloadCsv, exportDateStamp } from "@/lib/export";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function ProductsPage() {
   const { t } = useT();
   const qc = useQueryClient();
   const isMobile = useIsMobile();
   const { data: productsData } = useCachedQuery(["products"], getProducts);
+  const salesQuery = useCachedQuery(["sales"], getSales);
+
   const [editing, setEditing] = useState<Product | null>(null);
   const [open, setOpen] = useState(false);
   const [saleProduct, setSaleProduct] = useState<string | undefined>();
@@ -34,28 +42,59 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [activeTab, setActiveTab] = useState<"active" | "archived" | "low_stock">("active");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [sellCart, setSellCart] = useState<{ product: Product; qty: number; sellPrice: number }[]>([]);
+
   const pageSize = isMobile ? 12 : 24;
 
   const allProducts = productsData ?? [];
+  const salesData = salesQuery.data ?? [];
 
   // Valuations
   const totalCostValuation = allProducts.filter(p => !p.archived).reduce((sum, p) => sum + (p.buy_price * p.stock), 0);
   const totalSaleValuation = allProducts.filter(p => !p.archived).reduce((sum, p) => sum + (p.sell_price * p.stock), 0);
   const totalExpectedProfit = Math.max(totalSaleValuation - totalCostValuation, 0);
 
+  // Compute popularity (quantity sold)
+  const popularityMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    salesData.forEach(s => {
+      if (s.product_id) {
+        map[s.product_id] = (map[s.product_id] ?? 0) + s.qty;
+      }
+    });
+    return map;
+  }, [salesData]);
+
+  // Extract unique categories
+  const categories = useMemo(() => {
+    return Array.from(new Set(allProducts.map(p => p.category).filter(Boolean))) as string[];
+  }, [allProducts]);
+
   // Filters
   const searchFiltered = allProducts.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    Object.values(p.attributes || {}).some(val => val.toLowerCase().includes(search.toLowerCase()))
+    (p.name || "").toLowerCase().includes(search.toLowerCase()) ||
+    Object.values(p.attributes || {}).some(val => val.toLowerCase().includes(search.toLowerCase())) ||
+    (p.category || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const filteredProducts = searchFiltered.filter(p => {
-    if (activeTab === "archived") return p.archived === true;
-    if (activeTab === "low_stock") return p.archived !== true && p.stock <= (p.min_stock ?? 5);
-    return p.archived !== true;
+    const matchesTab = activeTab === "archived" ? p.archived === true : p.archived !== true;
+    const matchesCategory = selectedCategory ? p.category === selectedCategory : true;
+    const matchesLowStock = activeTab === "low_stock" ? p.stock <= (p.min_stock ?? 5) : true;
+    return matchesTab && matchesCategory && matchesLowStock;
   });
 
-  const { items: productsToShow, totalPages, safePage } = paginate(filteredProducts, page, pageSize);
+  // Sort by popularity (descending)
+  const sortedProducts = useMemo(() => {
+    return [...filteredProducts].sort((a, b) => {
+      const popA = popularityMap[a.id] ?? 0;
+      const popB = popularityMap[b.id] ?? 0;
+      return popB - popA;
+    });
+  }, [filteredProducts, popularityMap]);
+
+  const { items: productsToShow, totalPages, safePage } = paginate(sortedProducts, page, pageSize);
 
   async function remove(p: Product) {
     if (!confirm(`${t("delete")}: ${p.name}?`)) return;
@@ -121,7 +160,6 @@ export default function ProductsPage() {
             {isMobile ? "" : t("download_csv")}
           </Button>
           <Button size="sm" variant="outline" className="h-8 text-[10px] sm:text-xs" onClick={() => setBuyOpen(true)}>{t("buy")}</Button>
-          <Button size="sm" className="h-8 text-[10px] sm:text-xs" onClick={() => { setSaleProduct(undefined); setSaleOpen(true); }}>{t("sell")}</Button>
         </div>
       </div>
 
@@ -129,6 +167,31 @@ export default function ProductsPage() {
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
         <Input className="pl-8 h-9 text-sm" placeholder={t("search_products")} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
       </div>
+
+      {/* Category Pills Slider */}
+      {categories.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 flex-nowrap scrollbar-none">
+          <Button
+            size="sm"
+            variant={selectedCategory === null ? "default" : "outline"}
+            className="h-7 text-[10px] rounded-full shrink-0 px-2.5"
+            onClick={() => { setSelectedCategory(null); setPage(1); }}
+          >
+            {t("all")}
+          </Button>
+          {categories.map(cat => (
+            <Button
+              key={cat}
+              size="sm"
+              variant={selectedCategory === cat ? "default" : "outline"}
+              className="h-7 text-[10px] rounded-full shrink-0 px-2.5"
+              onClick={() => { setSelectedCategory(cat); setPage(1); }}
+            >
+              {cat}
+            </Button>
+          ))}
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as any); setPage(1); }}>
         <TabsList className="grid grid-cols-3 w-full h-8 p-0.5 bg-muted/60">
@@ -143,62 +206,193 @@ export default function ProductsPage() {
         </TabsList>
       </Tabs>
 
+      {/* Sell Basket Panel */}
+      {sellCart.length > 0 && (
+        <Card className="p-3 border-emerald-500/30 bg-emerald-500/5 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <ShoppingCart className="size-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="font-semibold text-xs text-emerald-800 dark:text-emerald-300">
+                {t("cart")} ({sellCart.reduce((sum, item) => sum + item.qty, 0)})
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6 text-muted-foreground hover:text-destructive"
+              onClick={() => setSellCart([])}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+
+          <div className="max-h-[160px] overflow-y-auto divide-y divide-border/60 pr-1">
+            {sellCart.map((item, index) => (
+              <div key={item.product.id} className="flex items-center justify-between py-1.5 text-xs gap-2">
+                <span className="truncate flex-1 font-medium">{item.product.name}</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSellCart(prev =>
+                        prev
+                          .map((x, i) => (i === index ? { ...x, qty: x.qty - 1 } : x))
+                          .filter(x => x.qty > 0)
+                      );
+                    }}
+                    className="size-5 rounded bg-muted hover:bg-muted-foreground/15 grid place-items-center"
+                  >
+                    <Minus className="size-3" />
+                  </button>
+                  <span className="font-mono text-xs w-4 text-center">{item.qty}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSellCart(prev =>
+                        prev.map((x, i) => (i === index ? { ...x, qty: Math.min(x.qty + 1, x.product.stock) } : x))
+                      );
+                    }}
+                    disabled={item.qty >= item.product.stock}
+                    className="size-5 rounded bg-muted hover:bg-muted-foreground/15 grid place-items-center disabled:opacity-40"
+                  >
+                    <Plus className="size-3" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="font-mono text-xs w-16 text-right">{fmtMoney(item.qty * item.sellPrice)}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-5 text-destructive"
+                    onClick={() => setSellCart(prev => prev.filter((_, i) => i !== index))}
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between border-t border-emerald-500/20 pt-2 text-xs">
+            <div>
+              <span className="text-muted-foreground">{t("total")}: </span>
+              <span className="font-bold text-sm">{fmtMoney(sellCart.reduce((sum, item) => sum + item.qty * item.sellPrice, 0))}</span>
+            </div>
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4"
+              onClick={() => {
+                setSaleOpen(true);
+              }}
+            >
+              {t("sell_selected")}
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {!productsData && <p className="text-xs text-muted-foreground">{t("loading")}</p>}
       {productsData && filteredProducts.length === 0 && (
         <Card className="p-6 text-center text-xs text-muted-foreground">{t("no_products")}</Card>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 pt-1">
+      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5 pt-1">
         {productsToShow.map(p => {
           const isLowStock = p.stock <= (p.min_stock ?? 5);
           return (
-            <Card key={p.id} className={`overflow-hidden border-border/60 flex flex-col justify-between ${p.archived ? "opacity-60" : ""}`}>
+            <Card key={p.id} className={`overflow-hidden border-border/60 flex flex-col justify-between p-1 sm:p-1.5 gap-1 ${p.archived ? "opacity-60" : ""}`}>
               <div>
-                <div className="relative">
+                <div className="relative rounded overflow-hidden">
                   <ProductImage path={p.image_url} className="w-full aspect-square object-cover" />
                   {!p.archived && isLowStock && (
-                    <div className="absolute top-1.5 right-1.5 bg-destructive text-destructive-foreground p-1 rounded-full shadow" title={t("critical_stock")}>
-                      <AlertCircle className="size-3.5" />
+                    <div className="absolute top-1 right-1 bg-destructive text-destructive-foreground p-0.5 rounded-full shadow" title={t("critical_stock")}>
+                      <AlertCircle className="size-3" />
                     </div>
                   )}
+                  {p.category && (
+                    <span className="absolute bottom-1 left-1 bg-black/60 text-[7px] text-white px-1 py-0.2 rounded font-medium truncate max-w-[80px]">
+                      {p.category}
+                    </span>
+                  )}
                 </div>
-                <div className="p-1.5 space-y-0.5">
-                  <div className="font-medium text-[10px] sm:text-xs truncate leading-tight" title={p.name}>{p.name}</div>
+                <div className="p-1 space-y-0.5">
+                  <div className="font-semibold text-[9px] sm:text-xs truncate leading-tight" title={p.name}>{p.name}</div>
                   
                   {/* Custom Attributes Badges */}
                   {p.attributes && Object.keys(p.attributes).length > 0 && (
-                    <div className="flex flex-wrap gap-0.5 pt-0.5 pb-1">
+                    <div className="flex flex-wrap gap-0.5 pt-0.5">
                       {Object.entries(p.attributes).map(([key, val]) => (
-                        <span key={key} className="bg-secondary/70 text-[8px] px-1 py-0.2 rounded text-secondary-foreground truncate max-w-[80px]" title={`${key}: ${val}`}>
+                        <span key={key} className="bg-secondary/70 text-[7px] px-1 py-0.2 rounded text-secondary-foreground truncate max-w-[80px]" title={`${key}: ${val}`}>
                           {val}
                         </span>
                       ))}
                     </div>
                   )}
 
-                  <div className="flex justify-between text-[9px] sm:text-[10px]">
+                  <div className="flex justify-between text-[8px] sm:text-[10px] pt-1">
                     <span className="text-muted-foreground">{t("sell_price")}</span>
                     <span className="font-semibold">{p.sell_price > 0 ? fmtMoney(p.sell_price) : "—"}</span>
                   </div>
-                  <div className="flex justify-between text-[9px] sm:text-[10px]">
+                  <div className="flex justify-between text-[8px] sm:text-[10px]">
                     <span className="text-muted-foreground">{t("stock")}</span>
                     <span className={isLowStock ? "text-destructive font-semibold" : ""}>{p.stock}</span>
                   </div>
                 </div>
               </div>
               
-              <div className="p-1.5 pt-0">
+              <div className="pt-0.5 flex gap-1">
                 {!p.archived ? (
-                  <div className="grid grid-cols-3 gap-0.5">
-                    <Button size="sm" className="h-6 text-[9px] px-1 col-span-1" onClick={() => { setSaleProduct(p.id); setSaleOpen(true); }}>{t("sell")}</Button>
-                    <Button size="sm" variant="ghost" className="h-6 text-[9px] px-0" onClick={() => { setEditing(p); setOpen(true); }}><Pencil className="size-3" /></Button>
-                    <Button size="sm" variant="ghost" className="h-6 text-[9px] px-0 text-muted-foreground hover:text-destructive" onClick={() => toggleArchive(p)} title={t("archive")}><Archive className="size-3" /></Button>
-                  </div>
+                  <>
+                    <Button
+                      size="sm"
+                      className="h-6 text-[8px] flex-1 px-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                      disabled={p.stock <= 0}
+                      onClick={() => {
+                        setSellCart(prev => {
+                          const existing = prev.find(x => x.product.id === p.id);
+                          if (existing) {
+                            return prev.map(x => x.product.id === p.id ? { ...x, qty: Math.min(x.qty + 1, p.stock) } : x);
+                          }
+                          return [...prev, { product: p, qty: 1, sellPrice: p.sell_price || 0 }];
+                        });
+                        toast.success(`${p.name} -> ${t("cart")}`);
+                      }}
+                    >
+                      + {t("sell")}
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="size-6 shrink-0 text-muted-foreground hover:bg-muted">
+                          <MoreVertical className="size-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-32">
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setSaleProduct(p.id);
+                            setSaleOpen(true);
+                          }}
+                          className="text-xs"
+                          disabled={p.stock <= 0}
+                        >
+                          {t("sell")} (Direct)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setEditing(p); setOpen(true); }} className="text-xs">
+                          <Pencil className="size-3 mr-1.5" /> {t("edit")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => toggleArchive(p)} className="text-xs">
+                          <Archive className="size-3 mr-1.5" /> {t("archive")}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </>
                 ) : (
-                  <div className="grid grid-cols-2 gap-0.5">
-                    <Button size="sm" variant="outline" className="h-6 text-[9px] px-1" onClick={() => toggleArchive(p)}>{t("restore")}</Button>
-                    <Button size="sm" variant="ghost" className="h-6 text-[9px] px-0 text-destructive" onClick={() => remove(p)}><Trash2 className="size-3" /></Button>
-                  </div>
+                  <>
+                    <Button size="sm" variant="outline" className="h-6 text-[8px] flex-1" onClick={() => toggleArchive(p)}>{t("restore")}</Button>
+                    <Button size="sm" variant="ghost" className="size-6 text-destructive shrink-0" onClick={() => remove(p)}>
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </>
                 )}
               </div>
             </Card>
@@ -210,7 +404,26 @@ export default function ProductsPage() {
 
       <FAB onClick={() => { setEditing(null); setOpen(true); }} />
       <ProductDialog open={open} onOpenChange={setOpen} product={editing} />
-      <SaleDialog open={saleOpen} onOpenChange={setSaleOpen} presetProductId={saleProduct} />
+      <SaleDialog
+        open={saleOpen}
+        onOpenChange={(v) => {
+          setSaleOpen(v);
+          if (!v) {
+            setSaleProduct(undefined);
+            setSellCart([]);
+          }
+        }}
+        presetProductId={saleProduct}
+        presetCart={
+          sellCart.length > 0
+            ? sellCart.map(c => ({
+                productId: c.product.id,
+                qty: String(c.qty),
+                sellPrice: String(c.sellPrice || c.product.sell_price),
+              }))
+            : undefined
+        }
+      />
       <PurchaseDialog open={buyOpen} onOpenChange={setBuyOpen} />
     </div>
   );
@@ -219,8 +432,8 @@ export default function ProductsPage() {
 export function FAB({ onClick }: { onClick: () => void }) {
   return (
     <button onClick={onClick}
-      className="fixed mobile-fab-bottom right-3 z-20 size-12 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-lg shadow-primary/25 active:scale-95 transition">
-      <Plus className="size-5" />
+      className="fixed mobile-fab-bottom right-3 z-20 size-10 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-lg shadow-primary/25 active:scale-95 transition">
+      <Plus className="size-4.5" />
     </button>
   );
 }

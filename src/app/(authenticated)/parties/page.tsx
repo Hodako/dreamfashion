@@ -58,7 +58,7 @@ export default function PartiesPage() {
   }, 0);
 
   const filtered = (parties.data ?? []).filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || (p.phone ?? "").includes(search);
+    const matchesSearch = (p.name || "").toLowerCase().includes(search.toLowerCase()) || (p.phone ?? "").includes(search);
     const matchesTab = activeTab === "archived" ? p.archived === true : p.archived !== true;
     return matchesSearch && matchesTab;
   });
@@ -174,7 +174,7 @@ export default function PartiesPage() {
                   <div className={`size-9 rounded-full grid place-items-center text-sm font-bold shrink-0 ${
                     outstanding > 0 ? "bg-primary/15 text-primary" : "bg-secondary text-secondary-foreground"
                   }`}>
-                    {p.name.charAt(0).toUpperCase()}
+                    {(p.name || "P").charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-semibold text-sm truncate">{p.name}</div>
@@ -235,7 +235,7 @@ function AddPartyDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
     const tempId = `temp-${Date.now()}`;
     const optimistic: Party = { id: tempId, name: trimmedName, phone: phoneVal, created_at: new Date().toISOString() };
 
-    setCachedData<Party[]>(qc, ["parties"], old => [...(old ?? []), optimistic].sort((a, b) => a.name.localeCompare(b.name)));
+    setCachedData<Party[]>(qc, ["parties"], old => [...(old ?? []), optimistic].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
     setName(""); setPhone("");
     onOpenChange(false);
     toast.success(`${trimmedName} — ${t("add_party")}`);

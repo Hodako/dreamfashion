@@ -9,9 +9,10 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
-import type { Product } from "@/lib/queries";
+import { getProducts, type Product } from "@/lib/queries";
 import { ImagePlus, Plus, Trash2 } from "lucide-react";
 import { createProductFn, updateProductFn, uploadImageFn } from "@/lib/rpc";
+import { useCachedQuery } from "@/hooks/use-cached-query";
 
 export function ProductDialog({
   open, onOpenChange, product,
@@ -21,13 +22,18 @@ export function ProductDialog({
   const { t } = useT();
   const { user } = useAuth();
   const qc = useQueryClient();
+  const { data: products = [] } = useCachedQuery(["products"], getProducts);
+  
   const [name, setName] = useState("");
   const [buy, setBuy] = useState("");
   const [stock, setStock] = useState("0");
   const [minStock, setMinStock] = useState("5");
+  const [category, setCategory] = useState("");
   const [attrs, setAttrs] = useState<{ key: string; val: string }[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))) as string[];
 
   useEffect(() => {
     if (open) {
@@ -35,6 +41,7 @@ export function ProductDialog({
       setBuy(String(product?.buy_price ?? ""));
       setStock(String(product?.stock ?? "0"));
       setMinStock(String(product?.min_stock ?? "5"));
+      setCategory(product?.category ?? "");
       setFile(null);
       if (product?.attributes) {
         setAttrs(Object.entries(product.attributes).map(([key, val]) => ({ key, val })));
@@ -87,6 +94,7 @@ export function ProductDialog({
         sell_price: product?.sell_price ?? 0,
         stock: Number(stock) || 0,
         min_stock: Number(minStock) ?? 5,
+        category: category.trim(),
         attributes: attributesObj,
       };
 
@@ -115,8 +123,35 @@ export function ProductDialog({
             <input type="file" accept="image/*" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           </label>
           <Field label={t("product_name")}><Input required placeholder={t("product_name")} value={name} onChange={e => setName(e.target.value)} /></Field>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <Field label={t("buy_price")}><Input inputMode="decimal" placeholder={t("buy_price")} value={buy} onChange={e => setBuy(e.target.value)} /></Field>
+            <Field label={t("category")}>
+              <div className="relative flex items-center">
+                <Input
+                  placeholder={t("category")}
+                  value={category}
+                  onChange={e => setCategory(e.target.value)}
+                  className="pr-8"
+                />
+                {categories.length > 0 && (
+                  <select
+                    value=""
+                    onChange={e => {
+                      if (e.target.value) setCategory(e.target.value);
+                    }}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 bg-transparent border-0 text-[10px] text-muted-foreground w-6 h-6 focus:outline-none cursor-pointer"
+                    title="Select existing category"
+                  >
+                    <option value="">▼</option>
+                    {categories.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <Field label={t("stock")}><Input inputMode="numeric" placeholder={t("stock")} value={stock} onChange={e => setStock(e.target.value)} /></Field>
             <Field label={t("min_stock")}><Input inputMode="numeric" placeholder="5" value={minStock} onChange={e => setMinStock(e.target.value)} /></Field>
           </div>

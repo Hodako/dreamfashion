@@ -21,10 +21,11 @@ import { Plus, Trash2 } from "lucide-react";
 type CartLine = { productId: string; qty: string; sellPrice: string };
 
 export function SaleDialog({
-  open, onOpenChange, presetType, presetProductId,
+  open, onOpenChange, presetType, presetProductId, presetCart,
 }: {
   open: boolean; onOpenChange: (v: boolean) => void;
   presetType?: "cash" | "credit" | "online"; presetProductId?: string;
+  presetCart?: { productId: string; qty: string; sellPrice: string }[];
 }) {
   const { t } = useT();
   const { user } = useAuth();
@@ -44,10 +45,14 @@ export function SaleDialog({
       setType(presetType ?? "cash");
       setPartyId("");
       setPaid("");
-      setCart(presetProductId ? [{ productId: presetProductId, qty: "1", sellPrice: "" }] : []);
+      if (presetCart && presetCart.length > 0) {
+        setCart(presetCart);
+      } else {
+        setCart(presetProductId ? [{ productId: presetProductId, qty: "1", sellPrice: "" }] : []);
+      }
       setDraft({ productId: "", qty: "1", sellPrice: "" });
     }
-  }, [open, presetType, presetProductId]);
+  }, [open, presetType, presetProductId, presetCart]);
 
   useEffect(() => {
     if (draft.productId && !draft.sellPrice) {

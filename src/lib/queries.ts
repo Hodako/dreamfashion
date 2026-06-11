@@ -26,6 +26,7 @@ export type Product = {
   attributes?: Record<string, string>;
   archived?: boolean;
   min_stock?: number;
+  category?: string;
 };
 export type Party = { id: string; name: string; phone: string | null; created_at: string; archived?: boolean };
 export type Sale = {

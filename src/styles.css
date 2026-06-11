@@ -374,3 +374,87 @@
 @keyframes lf2 { 0% { left: 200%; } 100% { left: -200%; opacity: 0; } }
 @keyframes lf3 { 0% { left: 200%; } 100% { left: -100%; opacity: 0; } }
 @keyframes lf4 { 0% { left: 200%; } 100% { left: -100%; opacity: 0; } }
+
+/* Mobile app compactness scaling */
+@media (max-width: 640px) {
+  :root {
+    font-size: 13.5px; /* compact layout scaling */
+  }
+
+  .glass-card, [class*="glass-card"] {
+    padding: 0.75rem !important;
+    border-radius: 0.5rem !important;
+  }
+
+  h1 { font-size: 1.25rem !important; }
+  h2 { font-size: 1.1rem !important; }
+  h3 { font-size: 0.95rem !important; }
+
+  button, a {
+    min-height: unset;
+  }
+
+  input, select, textarea {
+    font-size: 0.825rem !important;
+    height: 2.25rem !important;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+
+  /* Compact spacing for grid on mobile */
+  .grid {
+    gap: 0.5rem !important;
+  }
+}
+
+/* Print/PDF layout optimizations */
+@media print {
+  header,
+  nav,
+  aside,
+  .mobile-tab-bar,
+  .sidebar,
+  button,
+  .no-print,
+  .sidebar-trigger,
+  [role="dialog"] button,
+  .FAB,
+  #__next-build-watcher,
+  #__next-route-announcer {
+    display: none !important;
+  }
+
+  body, html, main, .app-shell, .min-h-screen, .min-h-dvh {
+    background: #ffffff !important;
+    background-image: none !important;
+    color: #000000 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: unset !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .invoice-print {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
+  /* Ensure text colors are printed correctly */
+  * {
+    color: #000000 !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+  }
+}

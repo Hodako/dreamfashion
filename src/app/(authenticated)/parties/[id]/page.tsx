@@ -148,7 +148,7 @@ export default function PartyDetail() {
       </Link>
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">{party.name}</h1>
+          <h1 className="text-2xl font-bold">{party.name || "Unnamed"}</h1>
           {party.phone && <p className="text-sm text-muted-foreground">{party.phone}</p>}
         </div>
         <div className="flex gap-1.5 shrink-0">
@@ -160,7 +160,7 @@ export default function PartyDetail() {
             variant="outline"
             className="text-destructive border-destructive/30"
             onClick={async () => {
-              if (!confirm(t("delete") + ` ${party.name}?`)) return;
+              if (!confirm(t("delete") + ` ${party.name || "Unnamed"}?`)) return;
               try {
                 setCachedData<Party[]>(qc, ["parties"], old => (old ?? []).filter(p => p.id !== id));
                 await deletePartyFn({ data: { id } });
@@ -246,13 +246,13 @@ export default function PartyDetail() {
 function EditPartyDialog({ party, open, onOpenChange }: { party: Party; open: boolean; onOpenChange: (v: boolean) => void }) {
   const { t } = useT();
   const qc = useQueryClient();
-  const [name, setName] = useState(party.name);
+  const [name, setName] = useState(party.name || "");
   const [phone, setPhone] = useState(party.phone ?? "");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setName(party.name);
+      setName(party.name || "");
       setPhone(party.phone ?? "");
     }
   }, [open, party.id, party.name, party.phone]);

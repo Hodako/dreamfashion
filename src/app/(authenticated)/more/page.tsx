@@ -3,7 +3,7 @@
 import Link from "next/link";
 import {
   ShoppingCart, Receipt, PiggyBank, DollarSign,
-  Banknote, BarChart3, Settings, ChevronRight,
+  Banknote, BarChart3, Settings, ChevronRight, FileText,
 } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { useAuth } from "@/hooks/use-auth";
@@ -11,6 +11,7 @@ import { canAccess, resolvePermissions } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 
 const moreLinks = [
+  { to: "/invoices",       labelKey: "invoice_generator", icon: FileText,     perm: "sales"      as const },
   { to: "/purchases",      labelKey: "new_purchase",    icon: ShoppingCart, perm: "purchases"  as const },
   { to: "/expenses",       labelKey: "expenses",        icon: Receipt,      perm: "expenses"   as const },
   { to: "/somiti",         labelKey: "somiti",          icon: PiggyBank,    perm: "expenses"   as const },

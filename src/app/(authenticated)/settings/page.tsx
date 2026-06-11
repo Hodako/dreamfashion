@@ -22,7 +22,7 @@ import { Trash2 } from "lucide-react";
 import type { PermissionSet } from "@/lib/permissions";
 import { DEFAULT_EMPLOYEE_PERMISSIONS } from "@/lib/permissions";
 import { uploadImageFn } from "@/lib/rpc";
-import { useTheme, type ThemeMode } from "@/hooks/use-theme";
+import { useTheme, type ThemeMode, type AccentColor, type BgStyle } from "@/hooks/use-theme";
 import { SpeedLoader } from "@/components/speed-loader";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -33,7 +33,7 @@ const BUSINESS_TYPES = ["retail", "wholesale", "fashion", "grocery", "services"]
 export default function SettingsPage() {
   const { t } = useT();
   const { user, refresh } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, accentColor, setAccentColor, bgStyle, setBgStyle } = useTheme();
   const isMobile = useIsMobile();
   const qc = useQueryClient();
   const settings = useQuery({ queryKey: ["business-settings"], queryFn: getBusinessSettingsFn });
@@ -131,6 +131,34 @@ export default function SettingsPage() {
                 <option value="light">{t("theme_light")}</option>
                 <option value="dark">{t("theme_dark")}</option>
                 <option value="system">{t("theme_system")}</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("accent_color")}</Label>
+              <select
+                value={accentColor}
+                onChange={e => setAccentColor(e.target.value as AccentColor)}
+                className="w-full h-9 rounded-md border border-input bg-input px-3 text-sm capitalize"
+              >
+                <option value="emerald">emerald (green)</option>
+                <option value="indigo">indigo</option>
+                <option value="violet">violet</option>
+                <option value="blue">blue</option>
+                <option value="rose">rose (red)</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("bg_style")}</Label>
+              <select
+                value={bgStyle}
+                onChange={e => setBgStyle(e.target.value as BgStyle)}
+                className="w-full h-9 rounded-md border border-input bg-input px-3 text-sm capitalize"
+              >
+                <option value="default">default gradient</option>
+                <option value="warm">warm glow</option>
+                <option value="cool">cool glow</option>
+                <option value="clean">solid clean</option>
+                <option value="glass">glassmorphism</option>
               </select>
             </div>
             <Button type="submit" disabled={busy} className="w-full sm:w-auto">{busy ? "…" : t("save")}</Button>

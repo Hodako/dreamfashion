@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { Search, Package, Users, ShoppingBag, Receipt, Settings, BarChart3, Home } from "lucide-react";
+import { Search, Package, Users, ShoppingBag, Receipt, Settings, BarChart3, Home, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty,
   CommandGroup, CommandItem, CommandSeparator,
@@ -15,6 +16,7 @@ import { fmtMoney } from "@/lib/format";
 import { canAccess } from "@/lib/permissions";
 import type { PermissionSet } from "@/lib/permissions";
 import { resolvePermissions } from "@/lib/permissions";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const PAGES: { to: string; labelKey: DictKey; icon: React.ElementType; perm?: keyof PermissionSet }[] = [
   { to: "/dashboard", labelKey: "home", icon: Home, perm: "dashboard" },
@@ -36,7 +38,10 @@ export function UniversalSearch({ role, permissions }: UniversalSearchProps) {
   const { t } = useT();
   const router = useRouter();
   const qc = useQueryClient();
+  const isMobile = useIsMobile();
+  
   const [open, setOpen] = useState(false);
+  const [mobileExpanded, setMobileExpanded] = useState(false);
   const [query, setQuery] = useState("");
 
   const perms = resolvePermissions(role, permissions);
@@ -46,19 +51,23 @@ export function UniversalSearch({ role, permissions }: UniversalSearchProps) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        setOpen(v => !v);
+        if (isMobile) {
+          setMobileExpanded(v => !v);
+        } else {
+          setOpen(v => !v);
+        }
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [isMobile]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open && !mobileExpanded) return;
     void qc.prefetchQuery({ queryKey: ["products"], queryFn: getProducts });
     void qc.prefetchQuery({ queryKey: ["parties"], queryFn: getParties });
     void qc.prefetchQuery({ queryKey: ["sales"], queryFn: getSales });
-  }, [open, qc]);
+  }, [open, mobileExpanded, qc]);
 
   const products = (qc.getQueryData(["products"]) as Product[] | undefined) ?? [];
   const parties = (qc.getQueryData(["parties"]) as Party[] | undefined) ?? [];
@@ -77,16 +86,138 @@ export function UniversalSearch({ role, permissions }: UniversalSearchProps) {
     }
     return {
       pages: pages.filter(p => t(p.labelKey).toLowerCase().includes(q)),
-      products: products.filter(p => p.name.toLowerCase().includes(q)).slice(0, 10),
-      parties: parties.filter(p => p.name.toLowerCase().includes(q) || (p.phone ?? "").includes(q)).slice(0, 10),
-      sales: sales.filter(s => s.product_name.toLowerCase().includes(q)).slice(0, 8),
+      products: products.filter(p => (p.name || "").toLowerCase().includes(q)).slice(0, 10),
+      parties: parties.filter(p => (p.name || "").toLowerCase().includes(q) || (p.phone ?? "").includes(q)).slice(0, 10),
+      sales: sales.filter(s => (s.product_name || "").toLowerCase().includes(q)).slice(0, 8),
     };
   }, [q, pages, products, parties, sales, t]);
 
   function go(to: string) {
     setOpen(false);
+    setMobileExpanded(false);
     setQuery("");
     router.push(to);
+  }
+
+  if (isMobile) {
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 shrink-0"
+          onClick={() => setMobileExpanded(true)}
+          aria-label={t("search")}
+        >
+          <Search className="icon-sm" />
+        </Button>
+
+        {mobileExpanded && (
+          <div className="fixed inset-x-0 top-0 h-12 bg-card border-b border-border/80 flex items-center px-3 gap-2 z-50 animate-in slide-in-from-top duration-200">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0 text-muted-foreground"
+              onClick={() => {
+                setMobileExpanded(false);
+                setQuery("");
+              }}
+            >
+              <ArrowLeft className="icon-sm" />
+            </Button>
+            <Input
+              className="flex-1 h-8 text-xs bg-muted/40 border-0 focus-visible:ring-1 focus-visible:ring-primary"
+              placeholder={t("universal_search")}
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              autoFocus
+            />
+
+            {/* Results absolute container */}
+            <div className="absolute top-12 inset-x-0 max-h-[calc(100vh-3rem)] overflow-y-auto bg-card/95 backdrop-blur-md border-b border-border shadow-xl z-50 p-2 space-y-3 pb-8">
+              {filtered.pages.length === 0 && filtered.products.length === 0 && filtered.parties.length === 0 && filtered.sales.length === 0 && (
+                <div className="text-center py-6 text-xs text-muted-foreground">{t("no_results")}</div>
+              )}
+
+              {filtered.pages.length > 0 && (
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1 font-semibold">{t("navigation")}</div>
+                  {filtered.pages.map(p => (
+                    <button
+                      key={p.to}
+                      onClick={() => go(p.to)}
+                      className="w-full flex items-center text-left text-xs px-2.5 py-2 hover:bg-muted active:bg-muted/70 rounded-md gap-2.5 transition-colors"
+                    >
+                      <p.icon className="size-4 opacity-70 text-primary" />
+                      <span className="font-medium">{t(p.labelKey)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {canAccess(perms, "products") && filtered.products.length > 0 && (
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1 font-semibold">{t("products")}</div>
+                  {filtered.products.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => go("/products")}
+                      className="w-full flex items-center justify-between text-left text-xs px-2.5 py-2 hover:bg-muted active:bg-muted/70 rounded-md gap-2.5 transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Package className="size-4 opacity-70 text-primary shrink-0" />
+                        <span className="truncate font-medium">{p.name}</span>
+                      </div>
+                      <span className="text-[10px] bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded font-mono shrink-0">
+                        {p.stock} {t("stock")}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {canAccess(perms, "parties") && filtered.parties.length > 0 && (
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1 font-semibold">{t("parties")}</div>
+                  {filtered.parties.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => go(`/parties/${p.id}`)}
+                      className="w-full flex items-center justify-between text-left text-xs px-2.5 py-2 hover:bg-muted active:bg-muted/70 rounded-md gap-2.5 transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Users className="size-4 opacity-70 text-primary shrink-0" />
+                        <span className="truncate font-medium">{p.name || "Unnamed"}</span>
+                      </div>
+                      {p.phone && <span className="text-[10px] text-muted-foreground font-mono shrink-0">{p.phone}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {canAccess(perms, "sales") && filtered.sales.length > 0 && (
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1 font-semibold">{t("sales")}</div>
+                  {filtered.sales.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => go("/sales")}
+                      className="w-full flex items-center justify-between text-left text-xs px-2.5 py-2 hover:bg-muted active:bg-muted/70 rounded-md gap-2.5 transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <ShoppingBag className="size-4 opacity-70 text-primary shrink-0" />
+                        <span className="truncate font-medium">{s.product_name}</span>
+                      </div>
+                      <span className="font-semibold text-primary shrink-0">{fmtMoney(s.sell_price * s.qty)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </>
+    );
   }
 
   return (

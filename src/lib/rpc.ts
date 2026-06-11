@@ -121,17 +121,17 @@ export async function getProductsFn() {
   return items.map((p) => ({ ...p, id: p._id as string }));
 }
 
-export async function createProductFn(input: { data: { name: string; image_url?: string | null; buy_price?: number; sell_price?: number; stock?: number; attributes?: Record<string, string>; min_stock?: number } }) {
+export async function createProductFn(input: { data: { name: string; image_url?: string | null; buy_price?: number; sell_price?: number; stock?: number; attributes?: Record<string, string>; min_stock?: number; category?: string } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
   const id = crypto.randomUUID();
-  const doc = { _id: id, owner_id: session.ownerId, name: data.name, image_url: data.image_url || null, buy_price: data.buy_price || 0, sell_price: data.sell_price || 0, stock: data.stock || 0, attributes: data.attributes || {}, min_stock: data.min_stock ?? 5, archived: false, created_at: new Date().toISOString() };
+  const doc = { _id: id, owner_id: session.ownerId, name: data.name, image_url: data.image_url || null, buy_price: data.buy_price || 0, sell_price: data.sell_price || 0, stock: data.stock || 0, attributes: data.attributes || {}, min_stock: data.min_stock ?? 5, category: data.category || "", archived: false, created_at: new Date().toISOString() };
   await db.collection("products").insertOne(doc);
   return { ...doc, id };
 }
 
-export async function updateProductFn(input: { data: { id: string; name?: string; image_url?: string | null; buy_price?: number; sell_price?: number; stock?: number; attributes?: Record<string, string>; min_stock?: number; archived?: boolean } }) {
+export async function updateProductFn(input: { data: { id: string; name?: string; image_url?: string | null; buy_price?: number; sell_price?: number; stock?: number; attributes?: Record<string, string>; min_stock?: number; category?: string; archived?: boolean } }) {
   const { data } = input;
   const session = await requireSession();
   const { id, ...updates } = data;
