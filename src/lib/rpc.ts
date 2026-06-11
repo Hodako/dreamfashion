@@ -336,16 +336,23 @@ export async function deleteSaleFn(input: { data: { id: string } }) {
     const db = await getDb();
     const sale = await db.collection("sales").findOne({ _id: data.id, owner_id: session.ownerId });
     if (!sale) throw new Error("Sale not found");
-    if (sale.returned) throw new Error("Already returned");
 
     if (sale.product_id) {
-      await db.collection("products").updateOne(
-        { _id: sale.product_id, owner_id: session.ownerId },
-        { $inc: { stock: Number(sale.qty) || 0 } }
-      );
+      const qtyToRestore = sale.returned ? 0 : (Number(sale.qty) || 0);
+      if (qtyToRestore > 0) {
+        await db.collection("products").updateOne(
+          { _id: sale.product_id, owner_id: session.ownerId },
+          { $inc: { stock: qtyToRestore } }
+        );
+      }
     }
 
+    // Clean up associated returns for this sale
+    await db.collection("returns").deleteMany({ sale_id: data.id, owner_id: session.ownerId });
+
+    // Clean up cashbox entries for this sale and its returns
     await db.collection("cashbox_entries").deleteMany({ owner_id: session.ownerId, ref_id: data.id });
+    
     await db.collection("sales").deleteOne({ _id: data.id, owner_id: session.ownerId });
     return { success: true };
   } catch (err: any) {
@@ -453,6 +460,59 @@ export async function getReturnsFn() {
   const db = await getDb();
   const items = await db.collection("returns").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
   return items.map((r) => ({ ...r, id: r._id as string }));
+}
+
+export async function deleteReturnFn(input: { data: { id: string } }) {
+  try {
+    const { data } = input;
+    const session = await requireSession();
+    const db = await getDb();
+
+    const ret = await db.collection("returns").findOne({ _id: data.id, owner_id: session.ownerId });
+    if (!ret) throw new Error("Return record not found");
+
+    if (ret.product_id) {
+      const product = await db.collection("products").findOne({ _id: ret.product_id });
+      if (product) {
+        await db.collection("products").updateOne(
+          { _id: ret.product_id },
+          { $set: { stock: Math.max(((product.stock as number) ?? 0) - (ret.qty as number), 0) } }
+        );
+      }
+    }
+
+    if (ret.sale_id) {
+      const sale = await db.collection("sales").findOne({ _id: ret.sale_id, owner_id: session.ownerId });
+      if (sale) {
+        const originalQty = (sale.qty as number) + (ret.qty as number);
+        const buyPrice = Number(sale.buy_price) || 0;
+        const sellPrice = Number(sale.sell_price) || 0;
+        const updatedProfit = (sellPrice - buyPrice) * originalQty;
+
+        await db.collection("sales").updateOne(
+          { _id: ret.sale_id },
+          {
+            $set: {
+              returned: false,
+              qty: originalQty,
+              profit: updatedProfit,
+            },
+            $unset: {
+              return_qty: "",
+            }
+          }
+        );
+      }
+    }
+
+    await db.collection("cashbox_entries").deleteMany({ owner_id: session.ownerId, ref_id: data.id });
+    await db.collection("returns").deleteOne({ _id: data.id, owner_id: session.ownerId });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in deleteReturnFn:", err);
+    return { success: false, error: err.message || String(err) };
+  }
 }
 
 // ─── Purchases ───────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, BarChart3 } from "lucide-react";
+import { Download, BarChart3, Trash2 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
@@ -13,6 +13,9 @@ import { getSales, getPurchases, getExpenses, getReturns, getParties } from "@/l
 import { fmtMoney, fmtDateTime } from "@/lib/format";
 import { downloadCsv, exportDateStamp } from "@/lib/export";
 import { PaginationBar, paginate } from "@/components/ui/pagination-bar";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { deleteSaleFn, deletePurchaseFn, deleteExpenseFn, deleteReturnFn } from "@/lib/rpc";
 
 type Range = "today" | "week" | "month" | "all";
 
@@ -34,11 +37,68 @@ function inRange(dateStr: string, range: Range, from?: string, to?: string) {
 
 export default function TrackbackPage() {
   const { lang, t } = useT();
+  const qc = useQueryClient();
   const [range, setRange] = useState<Range>("month");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 15;
+
+  async function handleDeleteSale(id: string) {
+    if (!confirm(t("delete") + "?")) return;
+    try {
+      const res = await deleteSaleFn({ data: { id } });
+      if (res && !res.success && 'error' in res) throw new Error(res.error as string);
+      toast.success(t("delete") || "Deleted successfully");
+      qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["cashbox"] });
+      qc.invalidateQueries({ queryKey: ["returns"] });
+    } catch (err: any) {
+      toast.error(err.message || String(err));
+    }
+  }
+
+  async function handleDeletePurchase(id: string) {
+    if (!confirm(t("delete") + "?")) return;
+    try {
+      const res = await deletePurchaseFn({ data: { id } });
+      if (res && !res.success && 'error' in res) throw new Error(res.error as string);
+      toast.success(t("delete") || "Deleted successfully");
+      qc.invalidateQueries({ queryKey: ["purchases"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+    } catch (err: any) {
+      toast.error(err.message || String(err));
+    }
+  }
+
+  async function handleDeleteExpense(id: string) {
+    if (!confirm(t("delete") + "?")) return;
+    try {
+      const res = await deleteExpenseFn({ data: { id } });
+      if (res && !res.success && 'error' in res) throw new Error(res.error as string);
+      toast.success(t("delete") || "Deleted successfully");
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      qc.invalidateQueries({ queryKey: ["cashbox"] });
+    } catch (err: any) {
+      toast.error(err.message || String(err));
+    }
+  }
+
+  async function handleDeleteReturn(id: string) {
+    if (!confirm(t("delete") + "?")) return;
+    try {
+      const res = await deleteReturnFn({ data: { id } });
+      if (res && !res.success && 'error' in res) throw new Error(res.error as string);
+      toast.success(t("delete") || "Deleted successfully");
+      qc.invalidateQueries({ queryKey: ["returns"] });
+      qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["cashbox"] });
+    } catch (err: any) {
+      toast.error(err.message || String(err));
+    }
+  }
 
   // Graph line toggle states
   const [showSales, setShowSales] = useState(true);
@@ -268,14 +328,24 @@ export default function TrackbackPage() {
               <p className="p-6 text-center text-xs text-muted-foreground">{t("no_sales")}</p>
             )}
             {pagedSales.map(s => (
-              <div key={s.id} className="px-3 py-2.5 flex justify-between gap-2 text-xs hover:bg-muted/10 transition-colors">
-                <div className="min-w-0">
+              <div key={s.id} className="px-3 py-2.5 flex items-center justify-between gap-2 text-xs hover:bg-muted/10 transition-colors">
+                <div className="min-w-0 flex-1">
                   <p className="font-medium truncate">{s.product_name} ×{s.qty}</p>
                   <p className="text-muted-foreground text-[10px]">{fmtDateTime(s.created_at)} · {s.type}</p>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="font-semibold">{fmtMoney(Number(s.sell_price) * s.qty)}</p>
-                  <p className="text-[9px] text-emerald-600">+{fmtMoney(s.profit)}</p>
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="text-right">
+                    <p className="font-semibold">{fmtMoney(Number(s.sell_price) * s.qty)}</p>
+                    <p className="text-[9px] text-emerald-600">+{fmtMoney(s.profit)}</p>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-7 text-destructive hover:bg-destructive/10"
+                    onClick={() => handleDeleteSale(s.id)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
                 </div>
               </div>
             ))}
@@ -288,6 +358,7 @@ export default function TrackbackPage() {
             items={filteredPurchases}
             render={p => ({ label: `${p.product_name} ×${p.qty}`, sub: fmtDateTime(p.created_at), amount: fmtMoney(p.total) })}
             empty={t("no_activity")}
+            onDelete={handleDeletePurchase}
           />
         </TabsContent>
 
@@ -296,6 +367,7 @@ export default function TrackbackPage() {
             items={filteredExpenses}
             render={e => ({ label: e.title, sub: fmtDateTime(e.created_at), amount: fmtMoney(e.amount) })}
             empty={t("no_activity")}
+            onDelete={handleDeleteExpense}
           />
         </TabsContent>
 
@@ -304,6 +376,7 @@ export default function TrackbackPage() {
             items={filteredReturns}
             render={r => ({ label: `${r.product_name} ×${r.qty}`, sub: fmtDateTime(r.created_at), amount: t("returned") })}
             empty={t("no_activity")}
+            onDelete={handleDeleteReturn}
           />
         </TabsContent>
       </Tabs>
@@ -316,11 +389,12 @@ export default function TrackbackPage() {
 }
 
 function RecordList<T extends { id: string }>({
-  items, render, empty,
+  items, render, empty, onDelete,
 }: {
   items: T[];
   render: (item: T) => { label: string; sub: string; amount: string };
   empty: string;
+  onDelete?: (id: string) => void;
 }) {
   const [page, setPage] = useState(1);
   const { items: paged, totalPages, safePage } = paginate(items, page, 15);
@@ -332,12 +406,24 @@ function RecordList<T extends { id: string }>({
         {paged.map(item => {
           const { label, sub, amount } = render(item);
           return (
-            <div key={item.id} className="px-3 py-2.5 flex justify-between gap-2 text-xs">
-              <div className="min-w-0">
+            <div key={item.id} className="px-3 py-2.5 flex items-center justify-between gap-2 text-xs hover:bg-muted/10 transition-colors">
+              <div className="min-w-0 flex-1">
                 <p className="font-medium truncate">{label}</p>
                 <p className="text-muted-foreground">{sub}</p>
               </div>
-              <p className="font-semibold shrink-0">{amount}</p>
+              <div className="flex items-center gap-2 shrink-0">
+                <p className="font-semibold">{amount}</p>
+                {onDelete && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-7 text-destructive hover:bg-destructive/10"
+                    onClick={() => onDelete(item.id)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                )}
+              </div>
             </div>
           );
         })}
