@@ -39,7 +39,32 @@ async function getClient(): Promise<MongoClient> {
   return _clientPromise;
 }
 
+let indexesInitialized = false;
+
+async function ensureIndexes(db: Db) {
+  if (indexesInitialized) return;
+  indexesInitialized = true;
+  try {
+    await Promise.all([
+      db.collection("products").createIndex({ owner_id: 1, created_at: -1 }),
+      db.collection("products").createIndex({ owner_id: 1, name: 1 }),
+      db.collection("sales").createIndex({ owner_id: 1, created_at: -1 }),
+      db.collection("purchases").createIndex({ owner_id: 1, created_at: -1 }),
+      db.collection("cashbox_entries").createIndex({ owner_id: 1, created_at: -1 }),
+      db.collection("expenses").createIndex({ owner_id: 1, created_at: -1 }),
+      db.collection("somiti_entries").createIndex({ owner_id: 1, created_at: -1 }),
+      db.collection("owner_withdrawals").createIndex({ owner_id: 1, created_at: -1 }),
+      db.collection("parties").createIndex({ owner_id: 1, name: 1 }),
+      db.collection("reminders").createIndex({ owner_id: 1, created_at: -1 }),
+    ]);
+  } catch (err) {
+    console.error("Failed to ensure indexes:", err);
+  }
+}
+
 export async function getDb(): Promise<Db> {
   const client = await getClient();
-  return client.db();
+  const db = client.db();
+  ensureIndexes(db);
+  return db;
 }

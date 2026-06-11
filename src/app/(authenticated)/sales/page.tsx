@@ -64,9 +64,9 @@ export default function SalesPage() {
 
       {(searchOpen || search) && (
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground z-10" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground z-10 pointer-events-none" />
           <Input
-            className="pl-9 h-9 text-sm"
+            className="pl-10 h-9 text-sm"
             placeholder={t("search_sales")}
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}

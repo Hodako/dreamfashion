@@ -568,6 +568,27 @@ export async function createSomitiFn(input: { data: { kind: string; amount: numb
   return { ...doc, id };
 }
 
+export async function updateSomitiFn(input: { data: { id: string; kind: string; amount: number; note?: string | null } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const { id, ...updates } = data;
+  await db.collection("somiti_entries").updateOne(
+    { _id: id, owner_id: session.ownerId },
+    { $set: updates }
+  );
+  const updated = await db.collection("somiti_entries").findOne({ _id: id });
+  return { ...updated, id };
+}
+
+export async function deleteSomitiFn(input: { data: { id: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  await db.collection("somiti_entries").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  return { success: true };
+}
+
 // ─── Withdrawals ──────────────────────────────────────────────────────────────
 
 export async function getWithdrawalsFn() {

@@ -187,8 +187,8 @@ export default function ProductsPage() {
       </div>
 
       <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground z-10" />
-        <Input className="pl-9 h-9 text-sm" placeholder={t("search_products")} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground z-10 pointer-events-none" />
+        <Input className="pl-10 h-9 text-sm" placeholder={t("search_products")} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
       </div>
 
       {/* Category Pills Slider */}
@@ -329,14 +329,8 @@ export default function ProductsPage() {
               isLowStock={isLowStock}
               t={t}
               onSell={() => {
-                setSellCart(prev => {
-                  const existing = prev.find(x => x.product.id === p.id);
-                  if (existing) {
-                    return prev.map(x => x.product.id === p.id ? { ...x, qty: Math.min(x.qty + 1, p.stock) } : x);
-                  }
-                  return [...prev, { product: p, qty: 1, sellPrice: p.sell_price || 0 }];
-                });
-                toast.success(`${p.name} -> ${t("cart")}`);
+                setSaleProduct(p.id);
+                setSaleOpen(true);
               }}
               onDirectSell={() => {
                 setSaleProduct(p.id);

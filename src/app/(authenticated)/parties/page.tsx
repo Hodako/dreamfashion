@@ -131,9 +131,9 @@ export default function PartiesPage() {
 
       <div className="sticky top-0 z-10 bg-background border-b pb-2 pt-3 px-4">
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground z-10" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground z-10 pointer-events-none" />
           <Input
-            className="pl-9"
+            className="pl-10"
             placeholder={t("search_parties")}
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}

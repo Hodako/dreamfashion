@@ -47,8 +47,11 @@ export function SaleDialog({
       setPaid("");
       if (presetCart && presetCart.length > 0) {
         setCart(presetCart);
+      } else if (presetProductId) {
+        const p = products.find(x => x.id === presetProductId);
+        setCart([{ productId: presetProductId, qty: "1", sellPrice: p ? String(p.sell_price || "") : "" }]);
       } else {
-        setCart(presetProductId ? [{ productId: presetProductId, qty: "1", sellPrice: "" }] : []);
+        setCart([]);
       }
       setDraft({ productId: "", qty: "1", sellPrice: "" });
     }
@@ -159,20 +162,49 @@ export function SaleDialog({
           </div>
 
           {cart.length > 0 && (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">{t("cart")} ({cart.length})</Label>
-              {cart.map((line, i) => {
-                const p = products.find(x => x.id === line.productId);
-                return (
-                  <div key={i} className="flex items-center justify-between text-xs border border-border rounded-md px-2 py-1.5">
-                    <span className="truncate flex-1">{p?.name} ×{line.qty}</span>
-                    <span className="font-medium mx-2">{fmtMoney(lineTotal(line))}</span>
-                    <Button type="button" variant="ghost" size="icon" className="size-6 shrink-0" onClick={() => setCart(prev => prev.filter((_, idx) => idx !== i))}>
-                      <Trash2 className="size-3" />
-                    </Button>
-                  </div>
-                );
-              })}
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {cart.map((line, i) => {
+                  const p = products.find(x => x.id === line.productId);
+                  return (
+                    <div key={i} className="flex flex-col gap-1 border border-border rounded-md p-2 text-xs bg-muted/10">
+                      <div className="flex items-center justify-between font-semibold">
+                        <span className="truncate flex-1 text-zinc-800 dark:text-zinc-200">{p?.name}</span>
+                        <Button type="button" variant="ghost" size="icon" className="size-6 shrink-0 text-destructive hover:bg-destructive/10" onClick={() => setCart(prev => prev.filter((_, idx) => idx !== i))}>
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mt-1">
+                        <div className="space-y-0.5">
+                          <span className="text-[9px] text-muted-foreground">{t("qty")}</span>
+                          <Input
+                            className="h-7 text-xs bg-background"
+                            type="number"
+                            value={line.qty}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setCart(prev => prev.map((x, idx) => idx === i ? { ...x, qty: val } : x));
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="text-[9px] text-muted-foreground">{t("sell_price")}</span>
+                          <Input
+                            className="h-7 text-xs bg-background"
+                            type="number"
+                            value={line.sellPrice}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setCart(prev => prev.map((x, idx) => idx === i ? { ...x, sellPrice: val } : x));
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

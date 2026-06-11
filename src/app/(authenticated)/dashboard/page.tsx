@@ -17,6 +17,7 @@ import { Card } from "@/components/ui/card";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/use-auth";
 import { canAccess, resolvePermissions } from "@/lib/permissions";
+import { ProductSearchSelect } from "@/components/product-search";
 import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
@@ -500,17 +501,12 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 gap-2 pt-0.5">
             <div className="space-y-0.5">
               <Label className="text-[9px] text-muted-foreground">{lang === "bn" ? "পণ্য নির্বাচন করুন" : "Select Product"}</Label>
-              <select
+              <ProductSearchSelect
+                products={products.data ?? []}
                 value={selectedProductId}
-                onChange={e => setSelectedProductId(e.target.value)}
-                className="w-full h-8 rounded border border-input bg-background px-2 text-[11px]"
-                required
-              >
-                <option value="">{lang === "bn" ? "পণ্য বাছাই করুন..." : "Choose product..."}</option>
-                {(products.data ?? []).map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                onChange={setSelectedProductId}
+                placeholder={lang === "bn" ? "পণ্য বাছাই করুন..." : "Choose product..."}
+              />
             </div>
             <div className="space-y-0.5">
               <Label className="text-[9px] text-muted-foreground">{lang === "bn" ? "সংকট সীমা (সংখ্যা)" : "Stock Limit"}</Label>

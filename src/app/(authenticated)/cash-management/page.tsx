@@ -1,6 +1,6 @@
 "use client";
 
-
+import Link from "next/link";
 import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,8 +15,6 @@ import { useT } from "@/lib/i18n";
 import { fmtMoney, fmtDate } from "@/lib/format";
 import { cashboxBalance } from "@/lib/cashbox-utils";
 import { Wallet, TrendingUp, AlertCircle, Receipt, Download, Code, ArrowUp, ArrowDown, ChevronRight, Banknote } from "lucide-react";
-
-
 
 function ChartTip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) {
   if (!active || !payload?.length) return null;
