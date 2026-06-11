@@ -63,6 +63,8 @@ export type Reminder = {
   title: string;
   due_date: string;
   completed: boolean;
+  logic_type?: string;
+  logic_config?: any;
   created_at: string;
 };
 

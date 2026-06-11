@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function ProductsPage() {
-  const { t } = useT();
+  const { lang, t } = useT();
   const qc = useQueryClient();
   const isMobile = useIsMobile();
   const { data: productsData } = useCachedQuery(["products"], getProducts);
@@ -48,6 +48,7 @@ export default function ProductsPage() {
   const [sellCart, setSellCart] = useState<{ product: Product; qty: number; sellPrice: number }[]>([]);
   const [returnProduct, setReturnProduct] = useState<Product | null>(null);
   const [returnOpen, setReturnOpen] = useState(false);
+  const [statsExpanded, setStatsExpanded] = useState(true);
 
   const pageSize = isMobile ? 12 : 24;
 
@@ -140,21 +141,39 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-3">
-      {/* Valuation & Top Header */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
-        <Card className="p-2 sm:p-3 bg-gradient-to-br from-indigo-50/50 to-indigo-100/50 dark:from-indigo-950/20 dark:to-indigo-900/10 border-indigo-200/30">
-          <div className="text-[8px] sm:text-[10px] text-muted-foreground uppercase tracking-wider">{t("stock_value")} ({t("buy")})</div>
-          <div className="text-xs sm:text-base font-bold font-serif text-indigo-700 dark:text-indigo-400 mt-0.5">{fmtMoney(totalCostValuation)}</div>
-        </Card>
-        <Card className="p-2 sm:p-3 bg-gradient-to-br from-emerald-50/50 to-emerald-100/50 dark:from-emerald-950/20 dark:to-emerald-900/10 border-emerald-200/30">
-          <div className="text-[8px] sm:text-[10px] text-muted-foreground uppercase tracking-wider">{t("stock_value")} ({t("sell")})</div>
-          <div className="text-xs sm:text-base font-bold font-serif text-emerald-700 dark:text-emerald-400 mt-0.5">{fmtMoney(totalSaleValuation)}</div>
-        </Card>
-        <Card className="p-2 sm:p-3 bg-gradient-to-br from-amber-50/50 to-amber-100/50 dark:from-amber-950/20 dark:to-amber-900/10 border-amber-200/30">
-          <div className="text-[8px] sm:text-[10px] text-muted-foreground uppercase tracking-wider">{t("profit")} (Expected)</div>
-          <div className="text-xs sm:text-base font-bold font-serif text-amber-700 dark:text-amber-400 mt-0.5">{fmtMoney(totalExpectedProfit)}</div>
-        </Card>
+      {/* Valuation & Top Header - Collapsible */}
+      <div className="flex items-center justify-between bg-secondary/20 px-3 py-1.5 rounded-lg border border-border/40 no-print">
+        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+          {lang === "bn" ? "স্টক এবং মূল্যায়ন পরিসংখ্যান" : "Stock & Valuation Statistics"}
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 text-[10px] hover:bg-transparent text-primary hover:text-primary/80"
+          onClick={() => setStatsExpanded(!statsExpanded)}
+        >
+          {statsExpanded 
+            ? (lang === "bn" ? "লুকান ▲" : "Hide Stats ▲") 
+            : (lang === "bn" ? "পরিসংখ্যান দেখান ▼" : "Show Stats ▼")}
+        </Button>
       </div>
+
+      {statsExpanded && (
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 transition-all duration-300">
+          <Card className="p-2 sm:p-3 bg-gradient-to-br from-indigo-50/50 to-indigo-100/50 dark:from-indigo-950/20 dark:to-indigo-900/10 border-indigo-200/30">
+            <div className="text-[8px] sm:text-[10px] text-muted-foreground uppercase tracking-wider">{t("stock_value")} ({t("buy")})</div>
+            <div className="text-xs sm:text-base font-bold font-serif text-indigo-700 dark:text-indigo-400 mt-0.5">{fmtMoney(totalCostValuation)}</div>
+          </Card>
+          <Card className="p-2 sm:p-3 bg-gradient-to-br from-emerald-50/50 to-emerald-100/50 dark:from-emerald-950/20 dark:to-emerald-900/10 border-emerald-200/30">
+            <div className="text-[8px] sm:text-[10px] text-muted-foreground uppercase tracking-wider">{t("stock_value")} ({t("sell")})</div>
+            <div className="text-xs sm:text-base font-bold font-serif text-emerald-700 dark:text-emerald-400 mt-0.5">{fmtMoney(totalSaleValuation)}</div>
+          </Card>
+          <Card className="p-2 sm:p-3 bg-gradient-to-br from-amber-50/50 to-amber-100/50 dark:from-amber-950/20 dark:to-amber-900/10 border-amber-200/30">
+            <div className="text-[8px] sm:text-[10px] text-muted-foreground uppercase tracking-wider">{t("profit")} (Expected)</div>
+            <div className="text-xs sm:text-base font-bold font-serif text-amber-700 dark:text-amber-400 mt-0.5">{fmtMoney(totalExpectedProfit)}</div>
+          </Card>
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-lg sm:text-xl font-bold">{t("products")}</h1>

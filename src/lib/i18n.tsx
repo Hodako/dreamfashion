@@ -217,6 +217,15 @@ const dict = {
   no_items_in_cart: { bn: "কার্টে কোনো পণ্য নেই", en: "No items in cart" },
   item_added: { bn: "পণ্য যোগ করা হয়েছে", en: "Item added to list" },
   popular: { bn: "জনপ্রিয়", en: "Popular" },
+  total_buys: { bn: "মোট ক্রয় (পণ্য কেনা)", en: "Total Buys (Purchases)" },
+  total_spends: { bn: "মোট খরচ (ব্যয়)", en: "Total Spends (Expenses)" },
+  net_profit: { bn: "নিট লাভ (আসল লাভ)", en: "Net Profit (Actual profit)" },
+  expected_profit: { bn: "প্রত্যাশিত লাভ", en: "Expected Profit" },
+  comparison_chart: { bn: "তুলনামূলক গ্রাফ", en: "Comparison Chart" },
+  trackback_period: { bn: "পিরিয়ড ট্র্যাকব্যাক", en: "Trackback Period" },
+  inventory_val_cost: { bn: "মালের কেনা দাম (স্টক মূল্য)", en: "Stock Cost Value" },
+  inventory_val_sale: { bn: "মালের বিক্রয় দাম (স্টক মূল্য)", en: "Stock Retail Value" },
+  key_metrics: { bn: "মূল হিসাবসমূহ", en: "Key Metrics" },
 } as const;
 
 export type DictKey = keyof typeof dict;

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { getExpenses, getSales, getWithdrawals, getProducts, getParties, getCashbox, getReminders } from "@/lib/queries";
+import type { Reminder } from "@/lib/queries";
 import { cashboxBalance } from "@/lib/cashbox-utils";
 import { fmtMoney, fmtDateTime } from "@/lib/format";
 import { Card } from "@/components/ui/card";
@@ -17,9 +18,11 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/use-auth";
 import { canAccess, resolvePermissions } from "@/lib/permissions";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { createReminderFn, toggleReminderFn, deleteReminderFn } from "@/lib/rpc";
 
@@ -127,7 +130,7 @@ function ChartTooltip({ active, payload, label }: any) {
 
 // ── main dashboard ────────────────────────────────────────────────────────
 export default function Dashboard() {
-  const { t } = useT();
+  const { lang, t } = useT();
   const { user } = useAuth();
   const qc = useQueryClient();
   const perms = resolvePermissions(user?.role ?? "employee", user?.permissions);
@@ -156,10 +159,16 @@ export default function Dashboard() {
   const [chartType, setChartType] = useState<"area" | "bar" | "line">("area");
   const [chartRange, setChartRange] = useState<7 | 14 | 30>(7);
 
-  // Custom Reminder State
+  // Custom Reminder State & Logic variables
   const [newReminderTitle, setNewReminderTitle] = useState("");
   const [newReminderDate, setNewReminderDate] = useState("");
   const [reminderBusy, setReminderBusy] = useState(false);
+  const [logicType, setLogicType] = useState<"none" | "low_stock" | "product_stock" | "party_due">("none");
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [stockThreshold, setStockThreshold] = useState("5");
+  const [selectedPartyId, setSelectedPartyId] = useState("");
+  const [duesThreshold, setDuesThreshold] = useState("1000");
+  const [showPopup, setShowPopup] = useState(false);
 
   // Collapsible sections on mobile
   const [collapsed, setCollapsed] = useState({
@@ -209,7 +218,7 @@ export default function Dashboard() {
       : !dateFilter.from || d >= new Date(dateFilter.from);
     const toOk = showToday
       ? d < tomorrow
-      : !dateFilter.to || d <= new Date(dateFilter.to);
+      : !dateFilter.to || d <= new Date(dateFilter.to + "T23:59:59");
     return fromOk && toOk;
   });
   const filteredExpenses = allExpenses.filter(e => {
@@ -220,7 +229,7 @@ export default function Dashboard() {
       : !dateFilter.from || d >= new Date(dateFilter.from);
     const toOk = showToday
       ? d < tomorrow
-      : !dateFilter.to || d <= new Date(dateFilter.to);
+      : !dateFilter.to || d <= new Date(dateFilter.to + "T23:59:59");
     return fromOk && toOk;
   });
   const filteredCashbox = allCashbox.filter(c => {
@@ -231,7 +240,7 @@ export default function Dashboard() {
       : !dateFilter.from || d >= new Date(dateFilter.from);
     const toOk = showToday
       ? d < tomorrow
-      : !dateFilter.to || d <= new Date(dateFilter.to);
+      : !dateFilter.to || d <= new Date(dateFilter.to + "T23:59:59");
     return fromOk && toOk;
   });
 
@@ -242,8 +251,6 @@ export default function Dashboard() {
   
   // profit today
   const profitToday  = filteredSales.filter(s => new Date(s.created_at) >= today).reduce((a, s) => a + Number(s.profit), 0);
-  const profitWeek   = filteredSales.filter(s => new Date(s.created_at) >= week).reduce((a, s) => a + Number(s.profit), 0);
-  const profitMonth  = filteredSales.filter(s => new Date(s.created_at) >= month).reduce((a, s) => a + Number(s.profit), 0);
   
   const totalDues    = filteredSales.reduce((a, s) => a + Number(s.due_amount), 0);
   const expenseToday = filteredExpenses.filter(e => new Date(e.created_at) >= today).reduce((a, e) => a + Number(e.amount), 0);
@@ -283,17 +290,121 @@ export default function Dashboard() {
   const recentSales = [...filteredSales].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 8);
 
   // Due alerts calculation
-  const duesByParty: Record<string, number> = {};
-  filteredSales.forEach(s => {
-    if (s.party_id) duesByParty[s.party_id] = (duesByParty[s.party_id] ?? 0) + Number(s.due_amount);
-  });
-  const paidByParty: Record<string, number> = {};
-  const allPayments = useCachedQuery(["all-payments"], () => Promise.resolve([])); // dummy or query
-  
   const dueAlertParties = allParties.map(p => {
     const rawSales = allSales.filter(s => s.party_id === p.id).reduce((sum, s) => sum + Number(s.due_amount), 0);
     return { ...p, outstanding: rawSales };
   }).filter(p => p.outstanding > 0).slice(0, 4);
+
+  // ── Smart Logic Reminders calculations ──────────────────────────────
+  const isReminderActive = (r: Reminder) => {
+    if (r.completed) return false;
+    if (!r.logic_type || r.logic_type === "none") {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      return r.due_date <= todayStr;
+    }
+    if (r.logic_type === "product_stock") {
+      const prod = (products.data ?? []).find(p => p.id === r.logic_config?.product_id);
+      const limit = r.logic_config?.min_stock ?? 5;
+      return Boolean(prod && prod.stock <= limit);
+    }
+    if (r.logic_type === "party_due") {
+      const party = allParties.find(p => p.id === r.logic_config?.party_id);
+      const maxDue = r.logic_config?.max_due ?? 1000;
+      if (party) {
+        const rawSales = allSales.filter(s => s.party_id === party.id).reduce((sum, s) => sum + Number(s.due_amount), 0);
+        return rawSales >= maxDue;
+      }
+      return false;
+    }
+    if (r.logic_type === "low_stock") {
+      const criticals = (products.data ?? []).filter(p => !p.archived && p.stock <= (p.min_stock ?? 5));
+      return criticals.length > 0;
+    }
+    return false;
+  };
+
+  const activeRemindersList = useMemo(() => {
+    const list: { id: string; title: string; type: string; isLogic: boolean }[] = [];
+
+    reminders.forEach(r => {
+      if (r.completed) return;
+      
+      if (!r.logic_type || r.logic_type === "none") {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (r.due_date <= todayStr) {
+          list.push({ id: r.id, title: r.title, type: lang === "bn" ? "সাধারণ সতর্কতা" : "General Alert", isLogic: false });
+        }
+      } else if (r.logic_type === "product_stock") {
+        const prod = (products.data ?? []).find(p => p.id === r.logic_config?.product_id);
+        const limit = r.logic_config?.min_stock ?? 5;
+        if (prod && prod.stock <= limit) {
+          list.push({
+            id: r.id,
+            title: lang === "bn" 
+              ? `${r.title}: ${prod.name} এর স্টক মাত্র ${prod.stock} টি আছে (সর্বনিম্ন স্টক সীমা: ${limit})`
+              : `${r.title}: ${prod.name} stock is only ${prod.stock} (Min limit: ${limit})`,
+            type: lang === "bn" ? "পণ্য স্টক সতর্কতা" : "Product Stock Alarm",
+            isLogic: true
+          });
+        }
+      } else if (r.logic_type === "party_due") {
+        const party = allParties.find(p => p.id === r.logic_config?.party_id);
+        const maxDue = r.logic_config?.max_due ?? 1000;
+        
+        if (party) {
+          const rawSales = allSales.filter(s => s.party_id === party.id).reduce((sum, s) => sum + Number(s.due_amount), 0);
+          if (rawSales >= maxDue) {
+            list.push({
+              id: r.id,
+              title: lang === "bn"
+                ? `${r.title}: ${party.name} এর বকেয়া ${fmtMoney(rawSales)} টাকা (বকেয়া সীমা: ${fmtMoney(maxDue)})`
+                : `${r.title}: ${party.name} owes ${fmtMoney(rawSales)} (Dues limit: ${fmtMoney(maxDue)})`,
+              type: lang === "bn" ? "পার্টির বকেয়া সতর্কতা" : "Customer Dues Alarm",
+              isLogic: true
+            });
+          }
+        }
+      } else if (r.logic_type === "low_stock") {
+        const criticals = (products.data ?? []).filter(p => !p.archived && p.stock <= (p.min_stock ?? 5));
+        if (criticals.length > 0) {
+          list.push({
+            id: r.id,
+            title: lang === "bn"
+              ? `${r.title}: ${criticals.length} টি পণ্য সংকটপূর্ণ স্টকে রয়েছে`
+              : `${r.title}: ${criticals.length} products are critical stock`,
+            type: lang === "bn" ? "সংকট স্টক সতর্কতা" : "Global Low Stock Alarm",
+            isLogic: true
+          });
+        }
+      }
+    });
+
+    return list;
+  }, [reminders, products.data, allParties, allSales, lang]);
+
+  // Request notifications and show popup modal once per session
+  useEffect(() => {
+    if (activeRemindersList.length > 0) {
+      const shown = sessionStorage.getItem("remindersPopupShown");
+      if (!shown) {
+        sessionStorage.setItem("remindersPopupShown", "true");
+        setShowPopup(true);
+        
+        // Push notification on phone/browser
+        if ("Notification" in window) {
+          Notification.requestPermission().then(perm => {
+            if (perm === "granted") {
+              const firstAlert = activeRemindersList[0];
+              new Notification(lang === "bn" ? "রিমাইন্ডার সতর্কতা" : "Reminder Alert", {
+                body: firstAlert.title,
+                icon: "/logo.png",
+              });
+            }
+          });
+        }
+      }
+    }
+  }, [activeRemindersList, lang]);
 
   // Custom Reminders Handlers
   async function handleAddReminder(e: React.FormEvent) {
@@ -305,10 +416,20 @@ export default function Dashboard() {
         data: {
           title: newReminderTitle.trim(),
           due_date: newReminderDate || new Date().toISOString().slice(0, 10),
+          logic_type: logicType,
+          logic_config: {
+            product_id: selectedProductId || null,
+            min_stock: Number(stockThreshold) || 0,
+            party_id: selectedPartyId || null,
+            max_due: Number(duesThreshold) || 0,
+          }
         },
       });
       setNewReminderTitle("");
       setNewReminderDate("");
+      setLogicType("none");
+      setSelectedProductId("");
+      setSelectedPartyId("");
       qc.invalidateQueries({ queryKey: ["reminders"] });
       toast.success(t("save"));
     } catch (err: unknown) {
@@ -346,6 +467,102 @@ export default function Dashboard() {
     if (chartMetric === "expenses") return "#ef4444";
     return "#6366f1";
   };
+
+  // Reusable Reminder Add Form
+  function renderReminderForm() {
+    return (
+      <div className="space-y-2 border-t border-border/50 pt-2 text-xs">
+        <div className="text-[10px] text-muted-foreground font-semibold uppercase">{t("custom_reminder")}</div>
+        
+        {/* Logic Type selector */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-0.5">
+            <Label className="text-[9px] text-muted-foreground">{lang === "bn" ? "রিমাইন্ডার ধরন" : "Logic Type"}</Label>
+            <select
+              value={logicType}
+              onChange={e => setLogicType(e.target.value as any)}
+              className="w-full h-8 rounded border border-input bg-background px-2 text-[11px]"
+            >
+              <option value="none">{lang === "bn" ? "সাধারণ / তারিখ ভিত্তিক" : "General / Date-based"}</option>
+              <option value="low_stock">{lang === "bn" ? "সংকট স্টক (সব পণ্য)" : "Global Low Stock Alert"}</option>
+              <option value="product_stock">{lang === "bn" ? "নির্দিষ্ট পণ্যের স্টক এলার্ট" : "Specific Product Stock Alert"}</option>
+              <option value="party_due">{lang === "bn" ? "পার্টির বকেয়া এলার্ট" : "Customer Dues Alert"}</option>
+            </select>
+          </div>
+          <div className="space-y-0.5">
+            <Label className="text-[9px] text-muted-foreground">{t("due_date")}</Label>
+            <Input type="date" className="h-8 text-xs w-full" value={newReminderDate} onChange={e => setNewReminderDate(e.target.value)} />
+          </div>
+        </div>
+
+        {/* Product Stock parameters */}
+        {logicType === "product_stock" && (
+          <div className="grid grid-cols-2 gap-2 pt-0.5">
+            <div className="space-y-0.5">
+              <Label className="text-[9px] text-muted-foreground">{lang === "bn" ? "পণ্য নির্বাচন করুন" : "Select Product"}</Label>
+              <select
+                value={selectedProductId}
+                onChange={e => setSelectedProductId(e.target.value)}
+                className="w-full h-8 rounded border border-input bg-background px-2 text-[11px]"
+                required
+              >
+                <option value="">{lang === "bn" ? "পণ্য বাছাই করুন..." : "Choose product..."}</option>
+                {(products.data ?? []).map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-0.5">
+              <Label className="text-[9px] text-muted-foreground">{lang === "bn" ? "সংকট সীমা (সংখ্যা)" : "Stock Limit"}</Label>
+              <Input type="number" className="h-8 text-xs" value={stockThreshold} onChange={e => setStockThreshold(e.target.value)} />
+            </div>
+          </div>
+        )}
+
+        {/* Customer Dues parameters */}
+        {logicType === "party_due" && (
+          <div className="grid grid-cols-2 gap-2 pt-0.5">
+            <div className="space-y-0.5">
+              <Label className="text-[9px] text-muted-foreground">{lang === "bn" ? "পার্টি নির্বাচন করুন" : "Select Party"}</Label>
+              <select
+                value={selectedPartyId}
+                onChange={e => setSelectedPartyId(e.target.value)}
+                className="w-full h-8 rounded border border-input bg-background px-2 text-[11px]"
+                required
+              >
+                <option value="">{lang === "bn" ? "পার্টি বাছাই করুন..." : "Choose party..."}</option>
+                {allParties.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-0.5">
+              <Label className="text-[9px] text-muted-foreground">{lang === "bn" ? "সর্বোচ্চ বকেয়া সীমা" : "Max Dues Limit"}</Label>
+              <Input type="number" className="h-8 text-xs" value={duesThreshold} onChange={e => setDuesThreshold(e.target.value)} />
+            </div>
+          </div>
+        )}
+
+        {/* Submit Form */}
+        <form onSubmit={handleAddReminder} className="flex gap-1.5 pt-1">
+          <Input
+            required
+            className="h-8 text-xs flex-1"
+            placeholder={
+              logicType === "none"
+                ? (lang === "bn" ? "রিমাইন্ডার টাইটেল..." : "Reminder Title...")
+                : (lang === "bn" ? "এলার্ট টাইটেল (যেমন: স্টক সতর্কতা)" : "Alert Title (e.g. Stock Alert)")
+            }
+            value={newReminderTitle}
+            onChange={e => setNewReminderTitle(e.target.value)}
+          />
+          <Button type="submit" disabled={reminderBusy} size="sm" className="h-8 px-3">
+            <Plus className="size-4" />
+          </Button>
+        </form>
+      </div>
+    );
+  }
 
   // ── Mobile Layout ─────────────────────────────────────────────────────
   if (isMobile) {
@@ -389,7 +606,7 @@ export default function Dashboard() {
         {/* Collapsible KPIs Section */}
         <Card className="p-3 border border-border space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Key Metrics</span>
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("key_metrics")}</span>
             <Button variant="ghost" size="icon" className="size-7" onClick={() => setCollapsed(prev => ({ ...prev, kpis: !prev.kpis }))}>
               {collapsed.kpis ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
             </Button>
@@ -423,14 +640,14 @@ export default function Dashboard() {
 
         {/* Collapsible Valuation Cards */}
         <Card className="p-3 border border-border space-y-2">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Stock Valuation</div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{lang === "bn" ? "পণ্য স্টক মূল্য (ইনভেন্টরি)" : "Stock & Inventory Valuation"}</div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="p-2 bg-secondary/50 rounded-lg">
-              <div className="text-[9px] text-muted-foreground">Total Cost Value</div>
+              <div className="text-[9px] text-muted-foreground">{t("inventory_val_cost")}</div>
               <div className="font-bold text-sm mt-0.5">{fmtMoney(totalStockCostValuation)}</div>
             </div>
             <div className="p-2 bg-secondary/50 rounded-lg">
-              <div className="text-[9px] text-muted-foreground">Total Retail Value</div>
+              <div className="text-[9px] text-muted-foreground">{t("inventory_val_sale")}</div>
               <div className="font-bold text-sm mt-0.5">{fmtMoney(totalStockSaleValuation)}</div>
             </div>
           </div>
@@ -450,9 +667,9 @@ export default function Dashboard() {
               {/* Chart Controls */}
               <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px]">
                 <div className="flex bg-muted rounded p-0.5">
-                  <button onClick={() => setChartMetric("sales")} className={`px-2 py-0.5 rounded ${chartMetric === "sales" ? "bg-background shadow font-medium" : ""}`}>Sales</button>
-                  <button onClick={() => setChartMetric("profit")} className={`px-2 py-0.5 rounded ${chartMetric === "profit" ? "bg-background shadow font-medium" : ""}`}>Profit</button>
-                  <button onClick={() => setChartMetric("expenses")} className={`px-2 py-0.5 rounded ${chartMetric === "expenses" ? "bg-background shadow font-medium" : ""}`}>Expenses</button>
+                  <button onClick={() => setChartMetric("sales")} className={`px-2 py-0.5 rounded ${chartMetric === "sales" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "বিক্রি" : "Sales"}</button>
+                  <button onClick={() => setChartMetric("profit")} className={`px-2 py-0.5 rounded ${chartMetric === "profit" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "লাভ" : "Profit"}</button>
+                  <button onClick={() => setChartMetric("expenses")} className={`px-2 py-0.5 rounded ${chartMetric === "expenses" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "খরচ" : "Expenses"}</button>
                 </div>
                 <div className="flex bg-muted rounded p-0.5">
                   <button onClick={() => setChartType("area")} className={`p-1 rounded ${chartType === "area" ? "bg-background shadow" : ""}`} title="Area Chart"><AreaChartIcon className="size-3" /></button>
@@ -505,65 +722,34 @@ export default function Dashboard() {
 
           {!collapsed.reminders && (
             <div className="space-y-3">
-              {/* Low stock automatic alerts */}
-              {lowStockProducts.length > 0 && (
-                <div className="space-y-1">
-                  <div className="text-[10px] text-destructive font-semibold uppercase">{t("low_stock_reminder")} ({lowStockProducts.length})</div>
-                  <div className="space-y-1 max-h-24 overflow-y-auto">
-                    {lowStockProducts.map(p => (
-                      <div key={p.id} className="text-[10px] p-1.5 bg-rose-500/10 text-rose-700 dark:text-rose-300 rounded flex items-center justify-between">
-                        <span>{p.name}</span>
-                        <span>Stock: {p.stock} &lt;= {p.min_stock ?? 5}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Due parties collection alerts */}
-              {dueAlertParties.length > 0 && (
-                <div className="space-y-1 border-t border-border/50 pt-2">
-                  <div className="text-[10px] text-amber-500 font-semibold uppercase">{t("due_reminder")}</div>
-                  <div className="space-y-1">
-                    {dueAlertParties.map(p => (
-                      <Link key={p.id} href={`/parties/${p.id}`} className="block text-[10px] p-1.5 bg-amber-500/10 text-amber-700 dark:text-amber-300 rounded flex items-center justify-between active:scale-[0.99]">
-                        <span className="font-medium">{p.name}</span>
-                        <span>{fmtMoney(p.outstanding)}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Custom reminders checklist */}
-              <div className="space-y-2 border-t border-border/50 pt-2">
-                <div className="text-[10px] text-muted-foreground font-semibold uppercase">{t("custom_reminder")}</div>
-                
-                {/* Add Reminder Inline Form */}
-                <form onSubmit={handleAddReminder} className="flex gap-1">
-                  <Input required className="h-7 text-xs flex-1" placeholder={t("add_reminder")} value={newReminderTitle} onChange={e => setNewReminderTitle(e.target.value)} />
-                  <Input type="date" className="h-7 text-xs w-24" value={newReminderDate} onChange={e => setNewReminderDate(e.target.value)} />
-                  <Button type="submit" disabled={reminderBusy} size="sm" className="h-7 px-2"><Plus className="size-3.5" /></Button>
-                </form>
+              {renderReminderForm()}
 
-                {/* Reminder Items */}
-                <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {reminders.length === 0 && <p className="text-[10px] text-muted-foreground italic text-center py-2">No custom tasks</p>}
-                  {reminders.map(r => (
-                    <div key={r.id} className="flex items-center justify-between p-1.5 border border-border rounded text-[10px]">
-                      <div className="flex items-center gap-1.5 min-w-0">
+              {/* Active Reminders List */}
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pt-2">
+                {reminders.length === 0 && <p className="text-[10px] text-muted-foreground italic text-center py-2">No custom tasks</p>}
+                {reminders.map(r => (
+                  <div key={r.id} className={`flex items-center justify-between p-2 border rounded text-xs transition-colors ${
+                    isReminderActive(r) ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-border"
+                  }`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      {(!r.logic_type || r.logic_type === "none") ? (
                         <button type="button" onClick={() => handleToggleReminder(r.id, !r.completed)}>
-                          {r.completed ? <CheckSquare className="size-3.5 text-primary shrink-0" /> : <Square className="size-3.5 text-muted-foreground shrink-0" />}
+                          {r.completed ? <CheckSquare className="size-4 text-primary shrink-0" /> : <Square className="size-4 text-muted-foreground shrink-0" />}
                         </button>
-                        <span className={`truncate ${r.completed ? "line-through text-muted-foreground" : "font-medium"}`}>{r.title}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0 text-muted-foreground">
-                        <span>{r.due_date}</span>
-                        <button type="button" className="text-destructive hover:scale-105 active:scale-95" onClick={() => handleDeleteReminder(r.id)}><Trash2 className="size-3" /></button>
-                      </div>
+                      ) : (
+                        <span className="inline-block text-[8px] font-bold px-1 py-0.2 rounded bg-primary/15 text-primary uppercase shrink-0">
+                          {lang === "bn" ? "অটো" : "Auto"}
+                        </span>
+                      )}
+                      <span className={`truncate ${r.completed ? "line-through text-muted-foreground" : "font-medium"}`}>{r.title}</span>
                     </div>
-                  ))}
-                </div>
+                    <div className="flex items-center gap-1.5 shrink-0 text-muted-foreground text-[10px]">
+                      <span>{r.due_date}</span>
+                      <button type="button" className="text-destructive hover:scale-105 active:scale-95" onClick={() => handleDeleteReminder(r.id)}><Trash2 className="size-3.5" /></button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -624,6 +810,68 @@ export default function Dashboard() {
             </Card>
           )}
         </div>
+
+        {/* Reminders Startup Popup Modal */}
+        {showPopup && activeRemindersList.length > 0 && (
+          <Dialog open={showPopup} onOpenChange={setShowPopup}>
+            <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto z-[10000]">
+              <DialogHeader>
+                <DialogTitle className="text-destructive flex items-center gap-1.5 text-base font-bold">
+                  <AlertCircle className="size-5" />
+                  {lang === "bn" ? "সতর্কতা ও রিমাইন্ডার" : "Alerts & Reminders"}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 pt-2">
+                <p className="text-xs text-muted-foreground">
+                  {lang === "bn"
+                    ? "নিম্নলিখিত সতর্কতা বা রিমাইন্ডারগুলি আপনার দৃষ্টি আকর্ষণ করছে:"
+                    : "The following alerts or reminders require your attention:"}
+                </p>
+                <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
+                  {activeRemindersList.map(item => (
+                    <div key={item.id} className="p-2.5 rounded-lg border border-destructive/20 bg-destructive/5 text-xs flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <span className="inline-block text-[9px] font-bold px-1.5 py-0.2 rounded bg-destructive/10 text-destructive uppercase tracking-wider">
+                          {item.type}
+                        </span>
+                        <p className="font-semibold leading-relaxed text-zinc-900 dark:text-zinc-100">{item.title}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {!item.isLogic && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-[9px] px-2"
+                            onClick={async () => {
+                              await handleToggleReminder(item.id, true);
+                            }}
+                          >
+                            {lang === "bn" ? "ঠিক আছে" : "Done"}
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10"
+                          onClick={async () => {
+                            await handleDeleteReminder(item.id);
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <DialogFooter className="pt-2 border-t">
+                  <Button size="sm" onClick={() => setShowPopup(false)} className="w-full sm:w-auto">
+                    {lang === "bn" ? "বন্ধ করুন" : "Close"}
+                  </Button>
+                </DialogFooter>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     );
   }
@@ -670,8 +918,8 @@ export default function Dashboard() {
         {canAccess(perms, "expenses") && (
           <KPICard label={t("expense")} value={fmtMoney(expenseToday)} sub={t("today")} icon={Receipt} color="bg-orange-500" trendUp={false} />
         )}
-        <KPICard label="Inventory Valuation (Cost)" value={fmtMoney(totalStockCostValuation)} sub="Cost Worth of Stock" icon={Package} color="bg-teal-500" />
-        <KPICard label="Inventory Valuation (Sale)" value={fmtMoney(totalStockSaleValuation)} sub="Selling Worth of Stock" icon={Package} color="bg-pink-500" />
+        <KPICard label={t("inventory_val_cost")} value={fmtMoney(totalStockCostValuation)} sub={lang === "bn" ? "কেনা মূল্যের হিসাব" : "Cost Worth of Stock"} icon={Package} color="bg-teal-500" />
+        <KPICard label={t("inventory_val_sale")} value={fmtMoney(totalStockSaleValuation)} sub={lang === "bn" ? "বিক্রি মূল্যের হিসাব" : "Selling Worth of Stock"} icon={Package} color="bg-pink-500" />
       </div>
 
       {/* Row 3: Custom Graph + Pie */}
@@ -685,9 +933,9 @@ export default function Dashboard() {
             <div className="flex items-center gap-3 text-xs">
               {/* Metric Selectors */}
               <div className="flex bg-muted rounded p-0.5">
-                <button onClick={() => setChartMetric("sales")} className={`px-2 py-0.5 rounded ${chartMetric === "sales" ? "bg-background shadow font-medium" : ""}`}>Sales</button>
-                <button onClick={() => setChartMetric("profit")} className={`px-2 py-0.5 rounded ${chartMetric === "profit" ? "bg-background shadow font-medium" : ""}`}>Profit</button>
-                <button onClick={() => setChartMetric("expenses")} className={`px-2 py-0.5 rounded ${chartMetric === "expenses" ? "bg-background shadow font-medium" : ""}`}>Expenses</button>
+                <button onClick={() => setChartMetric("sales")} className={`px-2 py-0.5 rounded ${chartMetric === "sales" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "বিক্রি" : "Sales"}</button>
+                <button onClick={() => setChartMetric("profit")} className={`px-2 py-0.5 rounded ${chartMetric === "profit" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "লাভ" : "Profit"}</button>
+                <button onClick={() => setChartMetric("expenses")} className={`px-2 py-0.5 rounded ${chartMetric === "expenses" ? "bg-background shadow font-medium" : ""}`}>{lang === "bn" ? "খরচ" : "Expenses"}</button>
               </div>
               {/* Chart Style Selectors */}
               <div className="flex bg-muted rounded p-0.5">
@@ -768,70 +1016,39 @@ export default function Dashboard() {
         <Card className="p-5 space-y-4">
           <div className="flex items-center justify-between border-b pb-2">
             <h2 className="text-sm font-semibold flex items-center gap-1.5">
-              <Calendar className="size-4 text-primary" /> {t("reminders")} & Tasks
+              <Calendar className="size-4 text-primary" /> {t("reminders")}
             </h2>
           </div>
 
           <div className="space-y-3">
-            {/* Low stock indicators */}
-            {lowStockProducts.length > 0 && (
-              <div className="space-y-1">
-                <div className="text-[10px] text-destructive font-semibold uppercase">{t("low_stock_reminder")} ({lowStockProducts.length})</div>
-                <div className="space-y-1 max-h-24 overflow-y-auto">
-                  {lowStockProducts.map(p => (
-                    <div key={p.id} className="text-[10px] p-2 bg-rose-500/10 text-rose-700 dark:text-rose-300 rounded flex items-center justify-between">
-                      <span className="font-medium">{p.name}</span>
-                      <span>Stock: {p.stock} &lt;={p.min_stock ?? 5}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Custom Reminders Config form */}
+            {renderReminderForm()}
 
-            {/* Outstanding customer collection alerts */}
-            {dueAlertParties.length > 0 && (
-              <div className="space-y-1">
-                <div className="text-[10px] text-amber-500 font-semibold uppercase">{t("due_reminder")}</div>
-                <div className="space-y-1">
-                  {dueAlertParties.map(p => (
-                    <Link key={p.id} href={`/parties/${p.id}`} className="block text-[10px] p-2 bg-amber-500/10 text-amber-700 dark:text-amber-300 rounded flex items-center justify-between hover:bg-amber-500/15">
-                      <span className="font-medium">{p.name}</span>
-                      <span>{fmtMoney(p.outstanding)}</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Custom reminders list */}
-            <div className="space-y-2 border-t pt-3.5">
-              <div className="text-[10px] text-muted-foreground font-semibold uppercase">{t("custom_reminder")}</div>
-              
-              {/* Add form */}
-              <form onSubmit={handleAddReminder} className="flex gap-1">
-                <Input required className="h-8 text-xs flex-1" placeholder={t("add_reminder")} value={newReminderTitle} onChange={e => setNewReminderTitle(e.target.value)} />
-                <Input type="date" className="h-8 text-xs w-28" value={newReminderDate} onChange={e => setNewReminderDate(e.target.value)} />
-                <Button type="submit" disabled={reminderBusy} size="sm" className="h-8 px-2.5"><Plus className="size-4" /></Button>
-              </form>
-
-              {/* Items */}
-              <div className="space-y-1.5 max-h-40 overflow-y-auto pt-1">
-                {reminders.length === 0 && <p className="text-xs text-muted-foreground italic text-center py-2">No custom tasks</p>}
-                {reminders.map(r => (
-                  <div key={r.id} className="flex items-center justify-between p-2 border border-border rounded text-xs">
-                    <div className="flex items-center gap-2 min-w-0">
+            {/* Reminder list items */}
+            <div className="space-y-1.5 max-h-48 overflow-y-auto pt-2">
+              {reminders.length === 0 && <p className="text-xs text-muted-foreground italic text-center py-2">No custom tasks</p>}
+              {reminders.map(r => (
+                <div key={r.id} className={`flex items-center justify-between p-2.5 border rounded text-xs transition-colors ${
+                  isReminderActive(r) ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-border"
+                }`}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    {(!r.logic_type || r.logic_type === "none") ? (
                       <button type="button" onClick={() => handleToggleReminder(r.id, !r.completed)}>
                         {r.completed ? <CheckSquare className="size-4 text-primary shrink-0" /> : <Square className="size-4 text-muted-foreground shrink-0" />}
                       </button>
-                      <span className={`truncate ${r.completed ? "line-through text-muted-foreground" : "font-medium"}`}>{r.title}</span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0 text-muted-foreground text-[10px]">
-                      <span>{r.due_date}</span>
-                      <button type="button" className="text-destructive hover:scale-105 active:scale-95" onClick={() => handleDeleteReminder(r.id)}><Trash2 className="size-3.5" /></button>
-                    </div>
+                    ) : (
+                      <span className="inline-block text-[8px] font-bold px-1.5 py-0.2 rounded bg-primary/10 text-primary uppercase shrink-0">
+                        {lang === "bn" ? "অটো" : "Auto"}
+                      </span>
+                    )}
+                    <span className={`truncate ${r.completed ? "line-through text-muted-foreground" : "font-medium"}`}>{r.title}</span>
                   </div>
-                ))}
-              </div>
+                  <div className="flex items-center gap-2 shrink-0 text-muted-foreground text-[10px]">
+                    <span>{r.due_date}</span>
+                    <button type="button" className="text-destructive hover:scale-105 active:scale-95" onClick={() => handleDeleteReminder(r.id)}><Trash2 className="size-3.5" /></button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </Card>
@@ -882,7 +1099,68 @@ export default function Dashboard() {
           </div>
         </Card>
       </div>
+
+      {/* Reminders Startup Popup Modal */}
+      {showPopup && activeRemindersList.length > 0 && (
+        <Dialog open={showPopup} onOpenChange={setShowPopup}>
+          <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto z-[10000]">
+            <DialogHeader>
+              <DialogTitle className="text-destructive flex items-center gap-1.5 text-base font-bold">
+                <AlertCircle className="size-5" />
+                {lang === "bn" ? "সতর্কতা ও রিমাইন্ডার" : "Alerts & Reminders"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 pt-2">
+              <p className="text-xs text-muted-foreground">
+                {lang === "bn"
+                  ? "নিম্নলিখিত সতর্কতা বা রিমাইন্ডারগুলি আপনার দৃষ্টি আকর্ষণ করছে:"
+                  : "The following alerts or reminders require your attention:"}
+              </p>
+              <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
+                {activeRemindersList.map(item => (
+                  <div key={item.id} className="p-2.5 rounded-lg border border-destructive/20 bg-destructive/5 text-xs flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <span className="inline-block text-[9px] font-bold px-1.5 py-0.2 rounded bg-destructive/10 text-destructive uppercase tracking-wider">
+                        {item.type}
+                      </span>
+                      <p className="font-semibold leading-relaxed text-zinc-900 dark:text-zinc-100">{item.title}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {!item.isLogic && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-[9px] px-2"
+                          onClick={async () => {
+                            await handleToggleReminder(item.id, true);
+                          }}
+                        >
+                          {lang === "bn" ? "ঠিক আছে" : "Done"}
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10"
+                        onClick={async () => {
+                          await handleDeleteReminder(item.id);
+                        }}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <DialogFooter className="pt-2 border-t">
+                <Button size="sm" onClick={() => setShowPopup(false)} className="w-full sm:w-auto">
+                  {lang === "bn" ? "বন্ধ করুন" : "Close"}
+                </Button>
+              </DialogFooter>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
-

@@ -633,7 +633,7 @@ export async function getRemindersFn() {
   return items.map((r) => ({ ...r, id: r._id as string }));
 }
 
-export async function createReminderFn(input: { data: { title: string; due_date: string } }) {
+export async function createReminderFn(input: { data: { title: string; due_date: string; logic_type?: string; logic_config?: any } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
@@ -643,6 +643,8 @@ export async function createReminderFn(input: { data: { title: string; due_date:
     owner_id: session.ownerId,
     title: data.title,
     due_date: data.due_date,
+    logic_type: data.logic_type || "none",
+    logic_config: data.logic_config || null,
     completed: false,
     created_at: new Date().toISOString(),
   };
