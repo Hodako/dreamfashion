@@ -35,6 +35,7 @@ import {
   Shield,
   Clock,
   ShieldAlert,
+  LogOut,
 } from "lucide-react";
 import { SpeedLoader } from "@/components/speed-loader";
 import { fmtDateTime } from "@/lib/format";
