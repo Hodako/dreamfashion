@@ -5,7 +5,7 @@ import { useCachedQuery } from "@/hooks/use-cached-query";
 import {
   TrendingUp, Wallet, AlertCircle, Receipt, ShoppingBag,
   Package, PlusCircle, ArrowUpRight, ArrowDownRight,
-  DollarSign, Banknote, Users,
+  DollarSign, Banknote, Users, Search,
 } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { getExpenses, getSales, getWithdrawals, getProducts, getParties, getCashbox } from "@/lib/queries";
@@ -127,6 +127,7 @@ export default function Dashboard() {
   const allCashbox    = cashbox.data ?? [];
 
   const [dateFilter, setDateFilter] = useState<{ from: string; to: string }>({ from: '', to: '' });
+  const [showFilter, setShowFilter] = useState(false);
 
   useEffect(() => {
     try {
@@ -155,26 +156,46 @@ export default function Dashboard() {
   // Compute filtered data based on date filter (if any)
   const filteredSales = allSales.filter(s => {
     const d = new Date(s.created_at);
-    const fromOk = !dateFilter.from || d >= new Date(dateFilter.from);
-    const toOk = !dateFilter.to || d <= new Date(dateFilter.to);
+    const showToday = !dateFilter.from && !dateFilter.to;
+    const fromOk = showToday
+      ? d >= tod
+      : !dateFilter.from || d >= new Date(dateFilter.from);
+    const toOk = showToday
+      ? d < tom
+      : !dateFilter.to || d <= new Date(dateFilter.to);
     return fromOk && toOk;
   });
   const filteredExpenses = allExpenses.filter(e => {
     const d = new Date(e.created_at);
-    const fromOk = !dateFilter.from || d >= new Date(dateFilter.from);
-    const toOk = !dateFilter.to || d <= new Date(dateFilter.to);
+    const showToday = !dateFilter.from && !dateFilter.to;
+    const fromOk = showToday
+      ? d >= tod
+      : !dateFilter.from || d >= new Date(dateFilter.from);
+    const toOk = showToday
+      ? d < tom
+      : !dateFilter.to || d <= new Date(dateFilter.to);
     return fromOk && toOk;
   });
   const filteredWithdrawals = allWithdrawals.filter(w => {
     const d = new Date(w.created_at);
-    const fromOk = !dateFilter.from || d >= new Date(dateFilter.from);
-    const toOk = !dateFilter.to || d <= new Date(dateFilter.to);
+    const showToday = !dateFilter.from && !dateFilter.to;
+    const fromOk = showToday
+      ? d >= tod
+      : !dateFilter.from || d >= new Date(dateFilter.from);
+    const toOk = showToday
+      ? d < tom
+      : !dateFilter.to || d <= new Date(dateFilter.to);
     return fromOk && toOk;
   });
   const filteredCashbox = allCashbox.filter(c => {
     const d = new Date(c.created_at);
-    const fromOk = !dateFilter.from || d >= new Date(dateFilter.from);
-    const toOk = !dateFilter.to || d <= new Date(dateFilter.to);
+    const showToday = !dateFilter.from && !dateFilter.to;
+    const fromOk = showToday
+      ? d >= tod
+      : !dateFilter.from || d >= new Date(dateFilter.from);
+    const toOk = showToday
+      ? d < tom
+      : !dateFilter.to || d <= new Date(dateFilter.to);
     return fromOk && toOk;
   });
 
@@ -250,31 +271,38 @@ export default function Dashboard() {
   if (isMobile) {
     return (
       <div className="space-y-4">
-        <div>
-          <h1 className="text-xl font-bold">{t("dashboard")}</h1>
-          <p className="text-xs text-muted-foreground">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold">{t("dashboard")}</h1>
+            <p className="text-xs text-muted-foreground">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={() => setShowFilter(!showFilter)} aria-label="Toggle filter">
+            <Search className="size-4" />
+          </Button>
         </div>
 
-        <Card className="p-4">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-            <div className="mb-2 sm:mb-0">
-              <label className="text-xs text-muted-foreground block mb-1">Date from</label>
-              <Input type="date" value={dateFilter.from} onChange={e => applyFilter(e.target.value, dateFilter.to)} />
+        {showFilter && (
+          <Card className="p-4 sticky top-0 z-20 bg-background border-b">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              <div className="mb-2 sm:mb-0">
+                <label className="text-xs text-muted-foreground block mb-1">Date from</label>
+                <Input type="date" placeholder={t("date")} value={dateFilter.from} onChange={e => applyFilter(e.target.value, dateFilter.to)} />
+              </div>
+              <div className="mb-2 sm:mb-0">
+                <label className="text-xs text-muted-foreground block mb-1">Date to</label>
+                <Input type="date" placeholder={t("date")} value={dateFilter.to} onChange={e => applyFilter(dateFilter.from, e.target.value)} />
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-end sm:gap-2">
+                <Button onClick={() => applyFilter(dateFilter.from, dateFilter.to)} variant="default" size="sm">
+                  Apply
+                </Button>
+                <Button onClick={clearFilter} variant="outline" size="sm">
+                  Clear
+                </Button>
+              </div>
             </div>
-            <div className="mb-2 sm:mb-0">
-              <label className="text-xs text-muted-foreground block mb-1">Date to</label>
-              <Input type="date" value={dateFilter.to} onChange={e => applyFilter(dateFilter.from, e.target.value)} />
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-end sm:gap-2">
-              <Button onClick={() => applyFilter(dateFilter.from, dateFilter.to)} variant="default" size="sm">
-                Apply
-              </Button>
-              <Button onClick={clearFilter} variant="outline" size="sm">
-                Clear
-              </Button>
-            </div>
-          </div>
-        </Card>
+          </Card>
+        )}
 
         {/* KPI 2-col grid */}
 
