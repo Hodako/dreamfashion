@@ -237,7 +237,7 @@ export default function DuesPage() {
         <div>
           <h1 className="text-xl font-bold tracking-tight font-serif">{lang === "bn" ? "বাকী খাতা ও আদায়" : "Dues & Collections"}</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {lang === "bn" ? `${totalDebtors} জন কাস্টমারের কাছে মোট বকেয়া পাওনা` : `${totalDebtors} customers with outstanding balances`}
+            {lang === "bn" ? `${totalDebtors} জন কাস্টমারের কাছে মোট বকেয়া জমা` : `${totalDebtors} customers with outstanding balances`}
           </p>
         </div>
         <Button size="sm" variant="outline" className="h-8 text-xs beveled-button" onClick={exportCSV}>
@@ -336,11 +336,11 @@ export default function DuesPage() {
             if (isReceivable) {
               cardBorder = "border-amber-500/25";
               badgeStyle = "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20";
-              labelText = lang === "bn" ? "পাওনা" : "Receivable";
+              labelText = lang === "bn" ? "জমা" : "Receivable";
             } else if (isPayable) {
               cardBorder = "border-rose-500/25";
               badgeStyle = "bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20";
-              labelText = lang === "bn" ? "দেনা" : "Payable";
+              labelText = lang === "bn" ? "বকেয়া" : "Payable";
             }
 
             return (
@@ -371,7 +371,7 @@ export default function DuesPage() {
 
                 {p.payableOutstanding > 0 && (
                   <div className="text-[9px] text-rose-600 font-semibold border-t border-dashed border-border/70 pt-1 -mt-1">
-                    {lang === "bn" ? `মোট দেনা বকেয়া: ${fmtMoney(p.payableOutstanding)}` : `Total Payable Dues: ${fmtMoney(p.payableOutstanding)}`}
+                    {lang === "bn" ? `মোট বকেয়া: ${fmtMoney(p.payableOutstanding)}` : `Total Payable Dues: ${fmtMoney(p.payableOutstanding)}`}
                   </div>
                 )}
 
@@ -414,7 +414,7 @@ export default function DuesPage() {
           <form onSubmit={submitCollection} className="space-y-4">
             {selectedParty && (
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 text-xs flex justify-between items-center text-amber-800 dark:text-amber-400 font-medium">
-                <span>{lang === "bn" ? "বর্তমান বকেয়া পাওনা:" : "Current Outstanding Dues:"}</span>
+                <span>{lang === "bn" ? "বর্তমান বকেয়া জমা:" : "Current Outstanding Dues:"}</span>
                 <span className="font-bold text-sm font-serif">{fmtMoney(selectedParty.outstanding)}</span>
               </div>
             )}
@@ -460,7 +460,7 @@ export default function DuesPage() {
           <form onSubmit={submitReceivable} className="space-y-4">
             {selectedParty && (
               <div className="bg-zinc-100 dark:bg-zinc-800 rounded-lg p-2.5 text-xs flex justify-between items-center font-medium">
-                <span>{lang === "bn" ? "বর্তমান বকেয়া পাওনা:" : "Current Outstanding Dues:"}</span>
+                <span>{lang === "bn" ? "বর্তমান বকেয়া জমা:" : "Current Outstanding Dues:"}</span>
                 <span className="font-bold text-sm font-serif text-amber-600">{fmtMoney(selectedParty.outstanding)}</span>
               </div>
             )}

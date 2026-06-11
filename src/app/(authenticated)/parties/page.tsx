@@ -219,13 +219,13 @@ export default function PartiesPage() {
                     <div className="flex flex-col items-end gap-0.5">
                       {outstanding > 0 && (
                         <div>
-                          <span className="text-[9px] text-muted-foreground block">{lang === "bn" ? "পাওনা" : "Owed to me"}</span>
+                          <span className="text-[9px] text-muted-foreground block">{lang === "bn" ? "জমা" : "Owed to me"}</span>
                           <span className="text-xs font-bold text-amber-600 font-serif">{fmtMoney(outstanding)}</span>
                         </div>
                       )}
                       {payableOutstanding > 0 && (
                         <div>
-                          <span className="text-[9px] text-muted-foreground block">{lang === "bn" ? "দেনা" : "I owe"}</span>
+                          <span className="text-[9px] text-muted-foreground block">{lang === "bn" ? "বকেয়া" : "I owe"}</span>
                           <span className="text-xs font-bold text-rose-600 font-serif">{fmtMoney(payableOutstanding)}</span>
                         </div>
                       )}
