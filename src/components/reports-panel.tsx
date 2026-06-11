@@ -81,11 +81,11 @@ export function ReportsPanel() {
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-0.5">
           <Label className="text-[10px] text-muted-foreground">{t("filter_date")} (from)</Label>
-          <Input type="date" className="h-8 text-xs" value={from} onChange={e => setFrom(e.target.value)} />
+          <Input type="date" placeholder={t("filter_date")} className="h-8 text-xs" value={from} onChange={e => setFrom(e.target.value)} />
         </div>
         <div className="space-y-0.5">
           <Label className="text-[10px] text-muted-foreground">{t("filter_date")} (to)</Label>
-          <Input type="date" className="h-8 text-xs" value={to} onChange={e => setTo(e.target.value)} />
+          <Input type="date" placeholder={t("filter_date")} className="h-8 text-xs" value={to} onChange={e => setTo(e.target.value)} />
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2 text-center text-xs">

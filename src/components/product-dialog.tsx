@@ -85,10 +85,10 @@ export function ProductDialog({
             <span className="text-sm text-muted-foreground">{file ? file.name : t("upload_image")}</span>
             <input type="file" accept="image/*" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           </label>
-          <Field label={t("product_name")}><Input required value={name} onChange={e => setName(e.target.value)} placeholder="Product name" /></Field>
+          <Field label={t("product_name")}><Input required placeholder={t("product_name")} value={name} onChange={e => setName(e.target.value)} /></Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={t("buy_price")}><Input inputMode="decimal" value={buy} onChange={e => setBuy(e.target.value)} placeholder="0" /></Field>
-            <Field label={t("stock")}><Input inputMode="numeric" value={stock} onChange={e => setStock(e.target.value)} placeholder="0" /></Field>
+            <Field label={t("buy_price")}><Input inputMode="decimal" placeholder={t("buy_price")} value={buy} onChange={e => setBuy(e.target.value)} /></Field>
+            <Field label={t("stock")}><Input inputMode="numeric" placeholder={t("stock")} value={stock} onChange={e => setStock(e.target.value)} /></Field>
           </div>
           {!product && (
             <p className="text-xs text-muted-foreground">{t("sell_price_on_purchase")}</p>

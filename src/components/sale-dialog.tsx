@@ -145,8 +145,8 @@ export function SaleDialog({
               <ProductSearchSelect products={products} value={draft.productId} onChange={v => setDraft(d => ({ ...d, productId: v }))} />
             </Field>
             <div className="grid grid-cols-2 gap-2">
-              <Field label={t("qty")}><Input inputMode="numeric" value={draft.qty} onChange={e => setDraft(d => ({ ...d, qty: e.target.value }))} /></Field>
-              <Field label={t("sell_price")}><Input inputMode="decimal" placeholder="0" value={draft.sellPrice} onChange={e => setDraft(d => ({ ...d, sellPrice: e.target.value }))} /></Field>
+              <Field label={t("qty")}><Input inputMode="numeric" placeholder={t("qty")} value={draft.qty} onChange={e => setDraft(d => ({ ...d, qty: e.target.value }))} /></Field>
+              <Field label={t("sell_price")}><Input inputMode="decimal" placeholder={t("sell_price")} value={draft.sellPrice} onChange={e => setDraft(d => ({ ...d, sellPrice: e.target.value }))} /></Field>
             </div>
             <Button type="button" variant="outline" size="sm" className="w-full" onClick={addToCart}>
               <Plus className="size-3.5 mr-1" />{t("add_to_cart")}
@@ -182,7 +182,7 @@ export function SaleDialog({
                 </Select>
               </Field>
               <div className="grid grid-cols-2 gap-3">
-                <Field label={t("paid_amount")}><Input inputMode="decimal" value={paid} onChange={e => setPaid(e.target.value)} /></Field>
+                <Field label={t("paid_amount")}><Input inputMode="decimal" placeholder={t("paid_amount")} value={paid} onChange={e => setPaid(e.target.value)} /></Field>
                 <Field label={t("due_amount")}><div className="h-9 px-3 grid items-center rounded-md bg-warning/10 font-semibold text-sm">{fmtMoney(due)}</div></Field>
               </div>
             </>

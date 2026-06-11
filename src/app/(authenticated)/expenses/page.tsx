@@ -108,9 +108,9 @@ function ExpenseDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle>{t("add_expense")}</DialogTitle></DialogHeader>
         <form onSubmit={submit} className="space-y-3">
-          <div className="space-y-1"><Label className="text-xs text-muted-foreground">{t("title")}</Label><Input required value={title} onChange={e => setTitle(e.target.value)} /></div>
-          <div className="space-y-1"><Label className="text-xs text-muted-foreground">{t("amount")}</Label><Input required inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} /></div>
-          <div className="space-y-1"><Label className="text-xs text-muted-foreground">{t("note")}</Label><Input value={note} onChange={e => setNote(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs text-muted-foreground">{t("title")}</Label><Input required placeholder={t("title")} value={title} onChange={e => setTitle(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs text-muted-foreground">{t("amount")}</Label><Input required placeholder={t("amount")} inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs text-muted-foreground">{t("note")}</Label><Input placeholder={t("note")} value={note} onChange={e => setNote(e.target.value)} /></div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t("cancel")}</Button>
             <Button type="submit" disabled={busy}>{busy ? "…" : t("save")}</Button>

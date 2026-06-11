@@ -101,15 +101,15 @@ export function PurchaseDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               <div className="grid grid-cols-3 gap-2">
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground">{t("qty")}</Label>
-                  <Input className="h-8 text-xs" inputMode="numeric" value={line.qty} onChange={e => updateLine(i, { qty: e.target.value })} />
+                  <Input className="h-8 text-xs" inputMode="numeric" placeholder={t("qty")} value={line.qty} onChange={e => updateLine(i, { qty: e.target.value })} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground">{t("buy_price")}</Label>
-                  <Input className="h-8 text-xs" inputMode="decimal" value={line.unitCost} onChange={e => updateLine(i, { unitCost: e.target.value })} />
+                  <Input className="h-8 text-xs" inputMode="decimal" placeholder={t("buy_price")} value={line.unitCost} onChange={e => updateLine(i, { unitCost: e.target.value })} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground">{t("sell_price")}</Label>
-                  <Input className="h-8 text-xs" inputMode="decimal" placeholder="—" value={line.sellPrice} onChange={e => updateLine(i, { sellPrice: e.target.value })} />
+                  <Input className="h-8 text-xs" inputMode="decimal" placeholder={t("sell_price")} value={line.sellPrice} onChange={e => updateLine(i, { sellPrice: e.target.value })} />
                 </div>
               </div>
             </div>
