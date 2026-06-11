@@ -14,7 +14,8 @@ export function PermissionGuard({ children }: { children: ReactNode }) {
 
   const perms = user ? resolvePermissions(user.role, user.permissions) : null;
   const required = permissionForPath(pathname);
-  const allowed = !user || !required || canAccess(perms || {}, required);
+  const isEmployee = user?.role === "employee";
+  const allowed = !user || ( (!required || canAccess(perms || {}, required)) && (!isEmployee || !pathname.startsWith("/somiti")) );
 
   useEffect(() => {
     if (!allowed) {

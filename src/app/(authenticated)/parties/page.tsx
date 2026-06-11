@@ -2,7 +2,7 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ChevronRight, UserPlus, Search, Users } from "lucide-react";
+import { ChevronRight, UserPlus, Search, Users, Archive, Download } from "lucide-react";
 import { getParties, getSales, getAllPayments, getAllPartyReceivables } from "@/lib/queries";
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import { PaginationBar, paginate } from "@/components/ui/pagination-bar";
@@ -14,10 +14,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { createPartyFn } from "@/lib/rpc";
+import { createPartyFn, archivePartyFn } from "@/lib/rpc";
 import { setCachedData, refreshQueries } from "@/lib/optimistic-cache";
 import type { Party } from "@/lib/queries";
 import Link from "next/link";
+import { downloadCsv, exportDateStamp } from "@/lib/export";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function PartiesPage() {
   const { t } = useT();
@@ -29,6 +31,7 @@ export default function PartiesPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
   const pageSize = 10;
 
   const duesByParty: Record<string, number> = {};
@@ -54,10 +57,11 @@ export default function PartiesPage() {
     return sum + Math.max((duesByParty[pid] ?? 0) - (paidByParty[pid] ?? 0), 0);
   }, 0);
 
-  const filtered = (parties.data ?? []).filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    (p.phone ?? "").includes(search),
-  );
+  const filtered = (parties.data ?? []).filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || (p.phone ?? "").includes(search);
+    const matchesTab = activeTab === "archived" ? p.archived === true : p.archived !== true;
+    return matchesSearch && matchesTab;
+  });
 
   const { items: pagedParties, totalPages, safePage } = paginate(filtered, page, pageSize);
 
@@ -70,17 +74,47 @@ export default function PartiesPage() {
     setCachedData<Party>(qc, ["party", p.id], p);
   }
 
+  async function toggleArchive(p: Party) {
+    const nextVal = !p.archived;
+    try {
+      await archivePartyFn({ data: { id: p.id, archived: nextVal } });
+      toast.success(nextVal ? t("archived") : t("active"));
+      qc.invalidateQueries({ queryKey: ["parties"] });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function exportParties() {
+    const headers = ["ID", "Name", "Phone", "Outstanding Dues", "Archived"];
+    const rows = filtered.map(p => [
+      p.id,
+      p.name,
+      p.phone || "",
+      partyOutstanding(p.id),
+      p.archived ? "Yes" : "No"
+    ]);
+    downloadCsv(`parties_${activeTab}_${exportDateStamp()}.csv`, headers, rows);
+    toast.success(t("download_csv"));
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">{t("party_collection")}</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">{parties.data?.length ?? 0} {t("parties")}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{filtered.length} {t("parties")}</p>
         </div>
-        <Button size="sm" onClick={() => setAddOpen(true)}>
-          <UserPlus className="size-4 mr-1" />
-          {t("add_party")}
-        </Button>
+        <div className="flex gap-1.5 items-center">
+          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={exportParties}>
+            <Download className="size-4 mr-1" />
+            {t("download_csv")}
+          </Button>
+          <Button size="sm" onClick={() => setAddOpen(true)}>
+            <UserPlus className="size-4 mr-1" />
+            {t("add_party")}
+          </Button>
+        </div>
       </div>
 
       <Card className="p-3 border-primary/20">
@@ -107,7 +141,14 @@ export default function PartiesPage() {
         </div>
       </div>
 
-      {parties.data && parties.data.length === 0 && (
+      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as any); setPage(1); }}>
+        <TabsList className="grid grid-cols-2 w-full h-8 p-0.5 bg-muted/60">
+          <TabsTrigger value="active" className="text-xs py-1">{t("active")}</TabsTrigger>
+          <TabsTrigger value="archived" className="text-xs py-1">{t("archived")}</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {parties.data && filtered.length === 0 && (
         <Card className="p-10 text-center">
           <Users className="size-10 text-muted-foreground mx-auto mb-3" />
           <p className="text-sm text-muted-foreground">{t("no_parties")}</p>
@@ -140,11 +181,26 @@ export default function PartiesPage() {
                     {p.phone && <div className="text-[10px] text-muted-foreground">{p.phone}</div>}
                     <div className="text-[10px] text-primary mt-0.5">{t("view")} →</div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <div className={`text-sm font-bold ${outstanding > 0 ? "text-primary" : "text-success"}`}>
-                      {fmtMoney(outstanding)}
+                  <div className="text-right shrink-0 flex items-center gap-2">
+                    <div>
+                      <div className={`text-sm font-bold ${outstanding > 0 ? "text-primary" : "text-success"}`}>
+                        {fmtMoney(outstanding)}
+                      </div>
+                      <div className="text-[9px] text-muted-foreground">{outstanding > 0 ? t("outstanding") : t("clear")}</div>
                     </div>
-                    <div className="text-[9px] text-muted-foreground">{outstanding > 0 ? t("outstanding") : t("clear")}</div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="size-7 p-0 text-muted-foreground hover:text-destructive shrink-0"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleArchive(p);
+                      }}
+                      title={p.archived ? t("restore") : t("archive")}
+                    >
+                      <Archive className="size-3.5" />
+                    </Button>
                   </div>
                   <ChevronRight className="icon-sm text-muted-foreground shrink-0" />
                 </div>

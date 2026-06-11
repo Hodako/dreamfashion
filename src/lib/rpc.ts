@@ -121,17 +121,17 @@ export async function getProductsFn() {
   return items.map((p) => ({ ...p, id: p._id as string }));
 }
 
-export async function createProductFn(input: { data: { name: string; image_url?: string | null; buy_price?: number; sell_price?: number; stock?: number } }) {
+export async function createProductFn(input: { data: { name: string; image_url?: string | null; buy_price?: number; sell_price?: number; stock?: number; attributes?: Record<string, string>; min_stock?: number } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
   const id = crypto.randomUUID();
-  const doc = { _id: id, owner_id: session.ownerId, name: data.name, image_url: data.image_url || null, buy_price: data.buy_price || 0, sell_price: data.sell_price || 0, stock: data.stock || 0, created_at: new Date().toISOString() };
+  const doc = { _id: id, owner_id: session.ownerId, name: data.name, image_url: data.image_url || null, buy_price: data.buy_price || 0, sell_price: data.sell_price || 0, stock: data.stock || 0, attributes: data.attributes || {}, min_stock: data.min_stock ?? 5, archived: false, created_at: new Date().toISOString() };
   await db.collection("products").insertOne(doc);
   return { ...doc, id };
 }
 
-export async function updateProductFn(input: { data: { id: string; name?: string; image_url?: string | null; buy_price?: number; sell_price?: number; stock?: number } }) {
+export async function updateProductFn(input: { data: { id: string; name?: string; image_url?: string | null; buy_price?: number; sell_price?: number; stock?: number; attributes?: Record<string, string>; min_stock?: number; archived?: boolean } }) {
   const { data } = input;
   const session = await requireSession();
   const { id, ...updates } = data;
@@ -146,6 +146,14 @@ export async function deleteProductFn(input: { data: { id: string } }) {
   const session = await requireSession();
   const db = await getDb();
   await db.collection("products").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  return { success: true };
+}
+
+export async function archiveProductFn(input: { data: { id: string; archived: boolean } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  await db.collection("products").updateOne({ _id: data.id, owner_id: session.ownerId }, { $set: { archived: data.archived } });
   return { success: true };
 }
 
@@ -183,6 +191,14 @@ export async function deletePartyFn(input: { data: { id: string } }) {
   const session = await requireSession();
   const db = await getDb();
   await db.collection("parties").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  return { success: true };
+}
+
+export async function archivePartyFn(input: { data: { id: string; archived: boolean } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  await db.collection("parties").updateOne({ _id: data.id, owner_id: session.ownerId }, { $set: { archived: data.archived } });
   return { success: true };
 }
 
@@ -564,4 +580,46 @@ export async function uploadImageFn(input: { data: { base64: string; fileName?: 
   const json = await res.json();
   if (!json.success) throw new Error(json.error?.message || "Upload failed");
   return { url: json.data.url as string };
+}
+
+// ─── Reminders ───────────────────────────────────────────────────────────────
+
+export async function getRemindersFn() {
+  const session = await requireSession();
+  const db = await getDb();
+  const items = await db.collection("reminders").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).toArray();
+  return items.map((r) => ({ ...r, id: r._id as string }));
+}
+
+export async function createReminderFn(input: { data: { title: string; due_date: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const id = crypto.randomUUID();
+  const doc = {
+    _id: id,
+    owner_id: session.ownerId,
+    title: data.title,
+    due_date: data.due_date,
+    completed: false,
+    created_at: new Date().toISOString(),
+  };
+  await db.collection("reminders").insertOne(doc);
+  return { ...doc, id };
+}
+
+export async function toggleReminderFn(input: { data: { id: string; completed: boolean } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  await db.collection("reminders").updateOne({ _id: data.id, owner_id: session.ownerId }, { $set: { completed: data.completed } });
+  return { success: true };
+}
+
+export async function deleteReminderFn(input: { data: { id: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  await db.collection("reminders").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  return { success: true };
 }

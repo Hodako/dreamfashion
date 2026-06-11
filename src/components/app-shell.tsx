@@ -19,6 +19,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AppLogo } from "@/components/app-logo";
 import { SpeedLoader } from "@/components/speed-loader";
 import { UniversalSearch } from "@/components/universal-search";
+import { BuySellOverlay } from "@/components/buy-sell-overlay";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -118,8 +119,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   const perms = resolvePermissions(user.role, user.permissions);
-  const sidebarGroups = filterGroups(desktopNavGroups, perms);
-  const bottomNav = filterNav(mobileNav, perms);
+  const isEmployee = user.role === "employee";
+  const sidebarGroups = filterGroups(desktopNavGroups, perms).map(group => ({
+    ...group,
+    items: group.items.filter(item => !(isEmployee && item.to === "/somiti"))
+  })).filter(group => group.items.length > 0);
+  const bottomNav = filterNav(mobileNav, perms).filter(item => !(isEmployee && item.to === "/somiti"));
   const brandName = user.business_name || "HakimEzy";
   const userInitials = user.email?.slice(0, 2).toUpperCase() ?? "HZ";
 
@@ -268,6 +273,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {isMobile && <div className="mobile-bottom-spacer" aria-hidden />}
         </main>
       </div>
+
+      {isMobile && <BuySellOverlay />}
 
       {isMobile && bottomNav.length > 0 && (
         <nav className="fixed bottom-0 inset-x-0 z-40 bg-card/92 backdrop-blur-lg border-t border-border/50 safe-area-pb mobile-tab-bar" style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 0px)" }}>

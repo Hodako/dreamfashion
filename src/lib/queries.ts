@@ -16,14 +16,18 @@ import {
   getReturnsFn,
   getPartyFn,
   getCashboxFn,
+  getRemindersFn,
 } from "@/lib/rpc";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export type Product = {
   id: string; name: string; image_url: string | null;
   buy_price: number; sell_price: number; stock: number; created_at: string;
+  attributes?: Record<string, string>;
+  archived?: boolean;
+  min_stock?: number;
 };
-export type Party = { id: string; name: string; phone: string | null; created_at: string };
+export type Party = { id: string; name: string; phone: string | null; created_at: string; archived?: boolean };
 export type Sale = {
   id: string; product_id: string | null; product_name: string;
   qty: number; buy_price: number; sell_price: number; profit: number;
@@ -53,6 +57,13 @@ export type CashboxEntry = {
   ref_id?: string | null;
   created_at: string;
 };
+export type Reminder = {
+  id: string;
+  title: string;
+  due_date: string;
+  completed: boolean;
+  created_at: string;
+};
 
 // ─── Query functions (called by react-query) ─────────────────────────────────
 export const getProducts = () => getProductsFn() as Promise<Product[]>;
@@ -72,6 +83,7 @@ export const getPartyReceivables = (partyId: string) => getPartyReceivablesFn({ 
 export const getPartyPayables = (partyId: string) => getPartyPayablesFn({ data: { partyId } }) as Promise<PartyLedger[]>;
 export const getPayableSettlements = (partyId: string) => getPayableSettlementsFn({ data: { partyId } }) as Promise<PartyLedger[]>;
 export const getReturns = () => getReturnsFn() as Promise<Return[]>;
+export const getReminders = () => getRemindersFn() as Promise<Reminder[]>;
 
 /** In ImgBB configuration, the path is already a direct URL string. */
 export async function signedImage(path: string | null): Promise<string | null> {
