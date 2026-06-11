@@ -75,9 +75,9 @@ export default function PartiesPage() {
     return Math.max(payableTotal - settledTotal, 0);
   };
 
-  const totalOutstanding = (parties.data ?? []).reduce((sum, p) => {
+  const totalPayable = (parties.data ?? []).reduce((sum, p) => {
     if (p.archived) return sum;
-    return sum + getPartyReceivable(p.id);
+    return sum + getPartyPayable(p.id);
   }, 0);
 
   const filtered = (parties.data ?? []).filter(p => {
@@ -147,8 +147,8 @@ export default function PartiesPage() {
             <Users className="icon-sm text-primary-foreground" />
           </div>
           <div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{t("total_owed")}</div>
-            <div className="text-xl font-bold font-serif text-primary">{fmtMoney(totalOutstanding)}</div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{lang === "bn" ? "মোট বকেয়া" : "Total Payable"}</div>
+            <div className="text-xl font-bold font-serif text-primary">{fmtMoney(totalPayable)}</div>
           </div>
         </div>
       </Card>
@@ -217,19 +217,12 @@ export default function PartiesPage() {
                   </div>
                   <div className="text-right shrink-0 flex items-center gap-2">
                     <div className="flex flex-col items-end gap-0.5">
-                      {outstanding > 0 && (
-                        <div>
-                          <span className="text-[9px] text-muted-foreground block">{lang === "bn" ? "জমা" : "Owed to me"}</span>
-                          <span className="text-xs font-bold text-amber-600 font-serif">{fmtMoney(outstanding)}</span>
-                        </div>
-                      )}
-                      {payableOutstanding > 0 && (
+                      {payableOutstanding > 0 ? (
                         <div>
                           <span className="text-[9px] text-muted-foreground block">{lang === "bn" ? "বকেয়া" : "I owe"}</span>
                           <span className="text-xs font-bold text-rose-600 font-serif">{fmtMoney(payableOutstanding)}</span>
                         </div>
-                      )}
-                      {outstanding === 0 && payableOutstanding === 0 && (
+                      ) : (
                         <div>
                           <span className="text-xs font-bold text-emerald-600">{lang === "bn" ? "পরিশোধিত" : "Clear"}</span>
                         </div>

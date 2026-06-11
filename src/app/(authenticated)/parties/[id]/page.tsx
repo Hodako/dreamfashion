@@ -43,7 +43,6 @@ export default function PartyDetail() {
   const payables = useCachedQuery(["party-payables", id], () => getPartyPayables(id));
   const settlements = useCachedQuery(["party-settlements", id], () => getPayableSettlements(id));
 
-  const [collectOpen, setCollectOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [addKind, setAddKind] = useState<"receivable" | "payable" | null>(null);
@@ -207,29 +206,21 @@ export default function PartyDetail() {
 
       {/* Decoupled balances, netting card removed */}
 
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="p-4 glass-card border-primary/20">
-          <div className="text-xs font-medium text-muted-foreground">{t("borrowed_from_me")}</div>
-          <div className="text-2xl font-bold text-amber-600 mt-1">{fmtMoney(outstanding)}</div>
-          <Button className="mt-2 w-full h-8 text-xs" size="sm" onClick={() => setCollectOpen(true)}>
-            <ArrowDownToLine className="size-3.5 mr-1" />{t("collect_payment")}
+      <div className="max-w-md mx-auto w-full space-y-4">
+        <Card className="p-5 glass-card border-rose-500/20 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-full blur-2xl pointer-events-none" />
+          <div className="text-xs font-semibold text-rose-600 uppercase tracking-wider">{t("borrowed_from_him")} (বকেয়া)</div>
+          <div className="text-3xl font-extrabold text-rose-600 mt-2 font-serif">{fmtMoney(payableOutstanding)}</div>
+          <p className="text-[11px] text-muted-foreground mt-3 leading-normal border-t border-dashed border-border/80 pt-2">
+            হিসাব: বকেয়া ({fmtMoney(payableTotal)}) − জমা ({fmtMoney(settledTotal)}) = বাকি পাবে {fmtMoney(payableOutstanding)}
+          </p>
+          <Button className="mt-4 w-full h-9 text-xs bg-rose-600 hover:bg-rose-700 text-white font-medium beveled-button" size="sm" onClick={() => setPayOpen(true)}>
+            <ArrowDownToLine className="size-3.5 mr-1.5 rotate-180" /> {t("pay_party")} (জমা দিন)
           </Button>
         </Card>
-        <Card className="p-4 glass-card border-border">
-          <div className="text-xs font-medium text-muted-foreground">{t("borrowed_from_him")}</div>
-          <div className="text-2xl font-bold text-rose-600 mt-1">{fmtMoney(payableOutstanding)}</div>
-          <Button className="mt-2 w-full h-8 text-xs" size="sm" variant="outline" onClick={() => setPayOpen(true)}>
-            {t("pay_party")}
-          </Button>
-        </Card>
-      </div>
 
-      <div className="flex gap-2">
-        <Button size="sm" variant="outline" className="flex-1" onClick={() => setAddKind("receivable")}>
-          <Plus className="size-3.5 mr-1" />{t("add_money_owed")}
-        </Button>
-        <Button size="sm" variant="outline" className="flex-1" onClick={() => setAddKind("payable")}>
-          <Plus className="size-3.5 mr-1" />{t("add_payable")}
+        <Button size="sm" variant="outline" className="w-full h-9 text-xs beveled-button" onClick={() => setAddKind("payable")}>
+          <Plus className="size-3.5 mr-1" /> {t("add_payable")} (বকেয়া যোগ করুন)
         </Button>
       </div>
 
@@ -256,7 +247,6 @@ export default function PartyDetail() {
         </Card>
       </div>
 
-      <CollectDialog partyId={id} open={collectOpen} onOpenChange={setCollectOpen} />
       <PayPartyDialog partyId={id} open={payOpen} onOpenChange={setPayOpen} />
       <EditPartyDialog party={party} open={editOpen} onOpenChange={setEditOpen} />
       {addKind && (
