@@ -537,3 +537,18 @@ export async function deleteLicenseFn(input: { data: { licenseKey: string } }) {
   await db.collection("licenses").deleteOne({ _id: key as any });
   return { success: true };
 }
+
+export async function impersonateUserFn(input: { data: { userId: string } }) {
+  const { data } = input;
+  await requireSuperAdminSession();
+  const db = await getDb();
+  const user = await db.collection("users").findOne({ _id: data.userId as any });
+  if (!user) throw new Error("User not found");
+
+  const token = await signToken({ userId: user._id as any as string, email: user.email as string });
+  const cookieStore = await cookies();
+  cookieStore.set("token", token, { maxAge: 8 * 60 * 60, httpOnly: true, sameSite: "lax", path: "/" });
+  
+  return { success: true };
+}
+

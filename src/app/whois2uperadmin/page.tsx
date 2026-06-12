@@ -20,6 +20,7 @@ import {
   getPlatformActivitiesFn,
   suspendBusinessFn,
   deleteBusinessFn,
+  impersonateUserFn,
 } from "@/lib/rpc-admin";
 import {
   Trash2,
@@ -38,6 +39,7 @@ import {
   ShieldAlert,
   LogOut,
   Copy,
+  LogIn,
 } from "lucide-react";
 import { SpeedLoader } from "@/components/speed-loader";
 import { fmtDateTime } from "@/lib/format";
@@ -487,17 +489,36 @@ export default function SuperAdminPage() {
                               <span className="font-semibold text-foreground">{b.owner_email}</span>
                               <span className="text-xs font-mono">Limit: {b.employee_limit} Staff</span>
                               {b.owner_id && (
-                                <span
-                                  className="text-[10px] text-muted-foreground hover:text-primary transition-all font-mono flex items-center gap-1 cursor-pointer w-max"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(b.owner_id);
-                                    toast.success(`Owner ID copied: ${b.owner_id}`);
-                                  }}
-                                  title="Click to copy Owner User ID"
-                                >
-                                  <Copy className="size-2.5" />
-                                  Owner ID: {b.owner_id.slice(0, 8)}…
-                                </span>
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                  <span
+                                    className="text-[10px] text-muted-foreground hover:text-primary transition-all font-mono flex items-center gap-1 cursor-pointer"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(b.owner_id);
+                                      toast.success(`Owner ID copied: ${b.owner_id}`);
+                                    }}
+                                    title="Click to copy Owner User ID"
+                                  >
+                                    <Copy className="size-2.5" />
+                                    Owner ID: {b.owner_id.slice(0, 8)}…
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="text-[10px] text-primary hover:text-primary-foreground font-semibold flex items-center gap-0.5 bg-primary/15 hover:bg-primary px-1.5 py-0.5 rounded transition-all cursor-pointer"
+                                    onClick={async () => {
+                                      try {
+                                        await impersonateUserFn({ data: { userId: b.owner_id } });
+                                        toast.success(`Logging in as ${b.owner_email}...`);
+                                        window.location.href = "/dashboard";
+                                      } catch (err: any) {
+                                        toast.error(err.message || "Failed to login as owner");
+                                      }
+                                    }}
+                                    title="Login to this Owner's dashboard"
+                                  >
+                                    <LogIn className="size-2.5" />
+                                    Login As Owner
+                                  </button>
+                                </div>
                               )}
                             </div>
                           </td>
@@ -636,17 +657,37 @@ export default function SuperAdminPage() {
                             {u.created_at ? fmtDateTime(u.created_at) : "N/A"}
                           </td>
                           <td className="p-4 text-right">
-                            <span
-                              className="inline-flex items-center gap-1.5 text-xs font-mono bg-muted/65 text-foreground hover:text-primary border border-border/80 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-muted/80 transition-all font-semibold"
-                              onClick={() => {
-                                navigator.clipboard.writeText(u.id);
-                                toast.success(`User ID copied: ${u.id}`);
-                              }}
-                              title="Click to copy User ID"
-                            >
-                              <Copy className="size-3.5 text-muted-foreground/80" />
-                              <span className="select-all">{u.id}</span>
-                            </span>
+                            <div className="flex items-center justify-end gap-2">
+                              <span
+                                className="inline-flex items-center gap-1.5 text-xs font-mono bg-muted/65 text-foreground hover:text-primary border border-border/80 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-muted/80 transition-all font-semibold"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(u.id);
+                                  toast.success(`User ID copied: ${u.id}`);
+                                }}
+                                title="Click to copy User ID"
+                              >
+                                <Copy className="size-3.5 text-muted-foreground/80" />
+                                <span className="select-all">{u.id.slice(0, 8)}…</span>
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 beveled-button text-xs font-semibold cursor-pointer"
+                                onClick={async () => {
+                                  try {
+                                    await impersonateUserFn({ data: { userId: u.id } });
+                                    toast.success(`Logging in as ${u.email}...`);
+                                    window.location.href = "/dashboard";
+                                  } catch (err: any) {
+                                    toast.error(err.message || "Failed to log in");
+                                  }
+                                }}
+                                title="Log in as this user"
+                              >
+                                <LogIn className="size-3.5 mr-1" />
+                                Login As
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       );
