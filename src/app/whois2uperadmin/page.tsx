@@ -14,6 +14,7 @@ import {
   generatePlatformLicenseFn,
   listPlatformLicensesFn,
   listBusinessesFn,
+  listAllUsersFn,
   deleteLicenseFn,
   getPlatformStatsFn,
   getPlatformActivitiesFn,
@@ -36,6 +37,7 @@ import {
   Clock,
   ShieldAlert,
   LogOut,
+  Copy,
 } from "lucide-react";
 import { SpeedLoader } from "@/components/speed-loader";
 import { fmtDateTime } from "@/lib/format";
@@ -49,7 +51,7 @@ export default function SuperAdminPage() {
   const [limit, setLimit] = useState("5");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const [activeTab, setActiveTab] = useState<"feed" | "businesses" | "licenses">("feed");
+  const [activeTab, setActiveTab] = useState<"feed" | "businesses" | "users" | "licenses">("feed");
   const [searchQuery, setSearchQuery] = useState("");
   
   // Safe cascade delete modal state
@@ -81,11 +83,18 @@ export default function SuperAdminPage() {
     enabled: auth.data?.authenticated === true,
   });
 
+  const users = useQuery({
+    queryKey: ["users-admin"],
+    queryFn: listAllUsersFn,
+    enabled: auth.data?.authenticated === true,
+  });
+
   const handleRefreshAll = () => {
     qc.invalidateQueries({ queryKey: ["platform-stats"] });
     qc.invalidateQueries({ queryKey: ["platform-activities"] });
     qc.invalidateQueries({ queryKey: ["platform-licenses"] });
     qc.invalidateQueries({ queryKey: ["businesses-admin"] });
+    qc.invalidateQueries({ queryKey: ["users-admin"] });
     toast.success("Surveillance dashboard updated!");
   };
 
@@ -148,6 +157,16 @@ export default function SuperAdminPage() {
     const note = String(l.note || "").toLowerCase();
     const query = searchQuery.toLowerCase();
     return id.includes(query) || note.includes(query);
+  });
+
+  const filteredUsers = (users.data ?? []).filter(u => {
+    const name = String(u.full_name || "").toLowerCase();
+    const email = String(u.email || "").toLowerCase();
+    const role = String(u.role || "").toLowerCase();
+    const biz = String(u.business_name || "").toLowerCase();
+    const id = String(u.id || "").toLowerCase();
+    const query = searchQuery.toLowerCase();
+    return name.includes(query) || email.includes(query) || role.includes(query) || biz.includes(query) || id.includes(query);
   });
 
   const selectedBizToDelete = (businesses.data ?? []).find(b => b.id === bizToDelete);
@@ -287,6 +306,17 @@ export default function SuperAdminPage() {
             Businesses ({businesses.data?.length ?? 0})
           </button>
           <button
+            onClick={() => { setActiveTab("users"); setSearchQuery(""); }}
+            className={`px-4 py-2 text-sm font-semibold rounded-lg flex items-center gap-2 transition-all ${
+              activeTab === "users"
+                ? "bg-primary/10 text-primary border border-primary/25"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+            }`}
+          >
+            <Users className="size-4" />
+            Users ({users.data?.length ?? 0})
+          </button>
+          <button
             onClick={() => { setActiveTab("licenses"); setSearchQuery(""); }}
             className={`px-4 py-2 text-sm font-semibold rounded-lg flex items-center gap-2 transition-all ${
               activeTab === "licenses"
@@ -305,7 +335,11 @@ export default function SuperAdminPage() {
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               type="text"
-              placeholder={activeTab === "businesses" ? "Filter by name or email..." : "Filter license code..."}
+              placeholder={
+                activeTab === "businesses" ? "Filter by name or email..." :
+                activeTab === "users" ? "Filter by name, email, role, or ID..." :
+                "Filter license code..."
+              }
               className="pl-9 bg-muted/20 border-border/40 focus:border-primary/50"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
@@ -373,6 +407,21 @@ export default function SuperAdminPage() {
                           </span>
                         </div>
                         <p className="font-medium text-foreground">{event.detail}</p>
+                        {event.type === "user" && (
+                          <div className="flex items-center gap-1.5 pt-1">
+                            <span
+                              className="text-[10px] text-cyan-600 dark:text-cyan-400 font-mono bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20 cursor-pointer hover:bg-cyan-500/20 transition-all flex items-center gap-1"
+                              onClick={() => {
+                                navigator.clipboard.writeText(event.id);
+                                toast.success(`User ID copied: ${event.id}`);
+                              }}
+                              title="Click to copy User ID"
+                            >
+                              <Copy className="size-2.5" />
+                              User ID: {event.id}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <span className="text-xs text-muted-foreground shrink-0 font-mono">
                         {fmtDateTime(event.time)}
@@ -434,9 +483,22 @@ export default function SuperAdminPage() {
                             </div>
                           </td>
                           <td className="p-4 text-muted-foreground">
-                            <div className="flex flex-col">
+                            <div className="flex flex-col gap-0.5">
                               <span className="font-semibold text-foreground">{b.owner_email}</span>
                               <span className="text-xs font-mono">Limit: {b.employee_limit} Staff</span>
+                              {b.owner_id && (
+                                <span
+                                  className="text-[10px] text-muted-foreground hover:text-primary transition-all font-mono flex items-center gap-1 cursor-pointer w-max"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(b.owner_id);
+                                    toast.success(`Owner ID copied: ${b.owner_id}`);
+                                  }}
+                                  title="Click to copy Owner User ID"
+                                >
+                                  <Copy className="size-2.5" />
+                                  Owner ID: {b.owner_id.slice(0, 8)}…
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="p-4 text-center">
@@ -499,6 +561,92 @@ export default function SuperAdminPage() {
                                 <Trash2 className="size-3.5" />
                               </Button>
                             </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* 3. USERS LIST */}
+        {activeTab === "users" && (
+          <Card className="glass-card overflow-hidden border-border/40">
+            {users.isLoading ? (
+              <div className="py-20 text-center text-muted-foreground">
+                <RefreshCw className="size-8 animate-spin mx-auto text-primary mb-2" />
+                Loading users list...
+              </div>
+            ) : filteredUsers.length === 0 ? (
+              <div className="py-20 text-center text-muted-foreground border-t">
+                No matching users found.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-border/60 bg-muted/35 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      <th className="p-4">User Detail</th>
+                      <th className="p-4">Role & Business</th>
+                      <th className="p-4">Registered On</th>
+                      <th className="p-4 text-right">User ID</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {filteredUsers.map(u => {
+                      const isOwner = u.role === "owner";
+                      const isActivated = u.activated;
+                      return (
+                        <tr key={u.id} className="hover:bg-muted/10 transition-colors">
+                          <td className="p-4">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-bold text-foreground text-sm">
+                                {u.full_name || "Unnamed User"}
+                              </span>
+                              <span className="text-xs text-muted-foreground">{u.email}</span>
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <div className="flex flex-col gap-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                                  isOwner 
+                                    ? "bg-purple-500/10 text-purple-500 border-purple-500/20" 
+                                    : "bg-blue-500/10 text-blue-500 border-blue-500/20"
+                                }`}>
+                                  {isOwner ? "Owner" : "Employee"}
+                                </span>
+                                {isActivated ? (
+                                  <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-1.5 py-0.2 rounded">
+                                    Activated
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.2 rounded">
+                                    Pending License
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground">{u.business_name}</span>
+                            </div>
+                          </td>
+                          <td className="p-4 text-muted-foreground text-xs font-mono">
+                            {u.created_at ? fmtDateTime(u.created_at) : "N/A"}
+                          </td>
+                          <td className="p-4 text-right">
+                            <span
+                              className="inline-flex items-center gap-1.5 text-xs font-mono bg-muted/65 text-foreground hover:text-primary border border-border/80 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-muted/80 transition-all font-semibold"
+                              onClick={() => {
+                                navigator.clipboard.writeText(u.id);
+                                toast.success(`User ID copied: ${u.id}`);
+                              }}
+                              title="Click to copy User ID"
+                            >
+                              <Copy className="size-3.5 text-muted-foreground/80" />
+                              <span className="select-all">{u.id}</span>
+                            </span>
                           </td>
                         </tr>
                       );

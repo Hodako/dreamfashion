@@ -112,6 +112,30 @@ export async function listBusinessesFn(): Promise<any[]> {
   return results;
 }
 
+export async function listAllUsersFn(): Promise<any[]> {
+  await requireSuperAdminSession();
+  const db = await getDb();
+  const users = await db.collection("users")
+    .find({})
+    .sort({ created_at: -1 })
+    .limit(200)
+    .toArray();
+  
+  const businesses = await db.collection("businesses").find({}).toArray();
+  const bizMap = new Map(businesses.map(b => [b._id as any as string, b.name as string]));
+
+  return users.map(u => ({
+    id: u._id as any as string,
+    email: (u.email as string) || "",
+    full_name: (u.full_name as string) || "",
+    role: (u.role as string) || "user",
+    activated: Boolean(u.activated),
+    business_id: (u.business_id as string) || null,
+    business_name: u.business_id ? (bizMap.get(u.business_id as string) || "Unknown Business") : "Pending Activation",
+    created_at: (u.created_at as string) || (u.activated_at as string) || "",
+  }));
+}
+
 export async function getPlatformStatsFn(): Promise<any> {
   await requireSuperAdminSession();
   const db = await getDb();
