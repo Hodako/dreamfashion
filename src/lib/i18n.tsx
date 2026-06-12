@@ -88,9 +88,10 @@ const dict = {
   record_sale: { bn: "বিক্রি যোগ করুন", en: "Record sale" },
   no_sales: { bn: "এখনো কোনো বিক্রি নেই", en: "No sales yet" },
   // purchases
-  new_purchase: { bn: "নতুন ক্রয়", en: "New purchase" },
+  new_purchase: { bn: "নতুন ক্রয়", en: "New purchase" },
   unit_cost: { bn: "প্রতি ইউনিট দাম", en: "Unit cost" },
   total: { bn: "মোট", en: "Total" },
+  losses: { bn: "লোকসান", en: "Losses" },
   // expenses
   expenses: { bn: "দোকান খরচ", en: "Expenses" },
   add_expense: { bn: "খরচ যোগ", en: "Add expense" },

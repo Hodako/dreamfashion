@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   ShoppingCart, Receipt, PiggyBank, DollarSign,
   Banknote, BarChart3, Settings, FileText,
-  LogOut, TrendingUp, GripVertical, Palette,
+  LogOut, TrendingUp, TrendingDown, GripVertical, Palette,
   Layout, Type, Image as ImageIcon, Sparkles
 } from "lucide-react";
 import { useT } from "@/lib/i18n";
@@ -31,6 +31,7 @@ const financeLinks = [
   { to: "/somiti",         labelKey: "somiti",          desc: "Manage Somiti accounts", icon: PiggyBank,    perm: "expenses"   as const },
   { to: "/cash-management",labelKey: "cash_management", desc: "Cashbox ledger & cashflow", icon: Banknote,     perm: "expenses"   as const },
   { to: "/profits",        labelKey: "profit",          desc: "Sales margins & net profits", icon: TrendingUp,  perm: "reports"    as const },
+  { to: "/losses",         labelKey: "losses",          desc: "Analyze transactional losses", icon: TrendingDown, perm: "reports" as const },
   { to: "/trackback",      labelKey: "trackback",       desc: "Comparative metrics chart", icon: BarChart3,    perm: "reports"    as const },
   { to: "/reports",        labelKey: "reports_generator", desc: "Generate custom PDF reports", icon: FileText, perm: "reports"    as const },
 ] as const;

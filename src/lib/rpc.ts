@@ -407,6 +407,82 @@ export async function deleteSaleFn(input: { data: { id: string } }) {
     return { success: false, error: err.message || String(err) };
   }
 }
+
+export async function editSaleFn(input: {
+  data: {
+    id: string;
+    product_id?: string | null;
+    product_name: string;
+    qty: number;
+    buy_price: number;
+    sell_price: number;
+    profit: number;
+    type: string;
+    party_id?: string | null;
+    paid_amount: number;
+    due_amount: number;
+    note?: string | null;
+  };
+}) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+
+  const oldSale = await db.collection("sales").findOne({ _id: data.id as any, owner_id: session.ownerId });
+  if (!oldSale) throw new Error("Sale not found");
+
+  if (oldSale.product_id && !oldSale.returned) {
+    const oldQty = Number(oldSale.qty) || 0;
+    if (oldQty > 0) {
+      await db.collection("products").updateOne(
+        { _id: oldSale.product_id as any, owner_id: session.ownerId },
+        { $inc: { stock: oldQty } }
+      );
+    }
+  }
+
+  await db.collection("cashbox_entries").deleteMany({ owner_id: session.ownerId, ref_id: data.id, kind: "sale" });
+
+  const updatedDoc = {
+    ...oldSale,
+    product_id: data.product_id || null,
+    product_name: data.product_name,
+    qty: data.qty,
+    buy_price: data.buy_price,
+    sell_price: data.sell_price,
+    profit: data.profit,
+    type: data.type,
+    party_id: data.type === "credit" ? data.party_id : null,
+    paid_amount: data.paid_amount,
+    due_amount: data.due_amount,
+    note: data.note || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  await db.collection("sales").updateOne({ _id: data.id as any, owner_id: session.ownerId }, { $set: updatedDoc });
+
+  if (data.product_id) {
+    const product = await db.collection("products").findOne({ _id: data.product_id as any, owner_id: session.ownerId });
+    if (product) {
+      await db.collection("products").updateOne(
+        { _id: data.product_id as any, owner_id: session.ownerId },
+        { $set: { stock: Math.max(((product.stock as number) ?? 0) - data.qty, 0) } }
+      );
+    }
+  }
+
+  const cashAmt = saleCashboxAmount(data);
+  if (cashAmt > 0) {
+    await insertCashboxEntry(db, session.ownerId, {
+      kind: "sale",
+      amount: cashAmt,
+      note: `Sale (Updated): ${data.product_name}`,
+      ref_id: data.id,
+    });
+  }
+
+  return { success: true };
+}
  
 export async function updateUserAvatarFn(input: { data: { avatar_url: string } }) {
   const { data } = input;

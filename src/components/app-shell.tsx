@@ -9,7 +9,7 @@ import {
   Home, Package, ShoppingBag, Users, MoreHorizontal,
   LogOut, Languages, Banknote, DollarSign, Settings,
   BarChart3, Receipt, PiggyBank, ShoppingCart, Moon, Sun, FileText,
-  TrendingUp,
+  TrendingUp, TrendingDown,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useT } from "@/lib/i18n";
@@ -35,7 +35,7 @@ import { PermissionGuard } from "@/components/permission-guard";
 
 type NavItem = {
   to: string;
-  labelKey: "home" | "products" | "sales" | "parties" | "settings" | "more" | "online_sell" | "cash_management" | "trackback" | "expenses" | "somiti" | "new_purchase" | "invoice_generator" | "due" | "profit" | "products_buy";
+  labelKey: "home" | "products" | "sales" | "parties" | "settings" | "more" | "online_sell" | "cash_management" | "trackback" | "expenses" | "somiti" | "new_purchase" | "invoice_generator" | "due" | "profit" | "products_buy" | "losses";
   icon: React.ElementType;
   perm?: keyof PermissionSet;
 };
@@ -68,6 +68,7 @@ const desktopNavGroups: NavGroup[] = [
     labelKey: "reports",
     items: [
       { to: "/profits", labelKey: "profit", icon: TrendingUp, perm: "reports" },
+      { to: "/losses", labelKey: "losses", icon: TrendingDown, perm: "reports" },
       { to: "/trackback", labelKey: "trackback", icon: BarChart3, perm: "reports" },
       { to: "/purchase-reports", labelKey: "products_buy", icon: ShoppingCart, perm: "reports" },
       { to: "/settings", labelKey: "settings", icon: Settings, perm: "settings" },

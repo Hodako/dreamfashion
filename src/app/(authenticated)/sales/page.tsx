@@ -17,7 +17,8 @@ import { useT } from "@/lib/i18n";
 import { fmtMoney, fmtDateTime } from "@/lib/format";
 import { FAB } from "@/components/ui/fab";
 import { SaleDialog } from "@/components/sale-dialog";
-import { RotateCcw, Search, Trash2 } from "lucide-react";
+import { EditSaleDialog } from "@/components/edit-sale-dialog";
+import { RotateCcw, Search, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { createReturnFn, deleteSaleFn } from "@/lib/rpc";
 
@@ -28,6 +29,7 @@ export default function SalesPage() {
   const isMobile = useIsMobile();
   const { data } = useCachedQuery(["sales"], getSales);
   const [open, setOpen] = useState(false);
+  const [editSale, setEditSale] = useState<Sale | null>(null);
   const [returnSale, setReturnSale] = useState<Sale | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -83,18 +85,21 @@ export default function SalesPage() {
           <TabsTrigger value="online">{t("online_sell")}</TabsTrigger>
         </TabsList>
         <TabsContent value="cash" className="pt-3 space-y-2">
-          <SalesTab items={cash} page={page} pageSize={pageSize} onPageChange={setPage} onReturn={setReturnSale} />
+          <SalesTab items={cash} page={page} pageSize={pageSize} onPageChange={setPage} onEdit={setEditSale} />
         </TabsContent>
         <TabsContent value="credit" className="pt-3 space-y-2">
-          <SalesTab items={credit} page={page} pageSize={pageSize} onPageChange={setPage} credit onReturn={setReturnSale} />
+          <SalesTab items={credit} page={page} pageSize={pageSize} onPageChange={setPage} credit onEdit={setEditSale} />
         </TabsContent>
         <TabsContent value="online" className="pt-3 space-y-2">
-          <SalesTab items={online} page={page} pageSize={pageSize} onPageChange={setPage} onReturn={setReturnSale} />
+          <SalesTab items={online} page={page} pageSize={pageSize} onPageChange={setPage} onEdit={setEditSale} />
         </TabsContent>
       </Tabs>
 
       <FAB onClick={() => setOpen(true)} />
       <SaleDialog open={open} onOpenChange={setOpen} />
+      {editSale && (
+        <EditSaleDialog sale={editSale} open={!!editSale} onOpenChange={v => { if (!v) setEditSale(null); }} />
+      )}
       {returnSale && (
         <ReturnDialog sale={returnSale} open={!!returnSale} onOpenChange={v => { if (!v) setReturnSale(null); }} />
       )}
@@ -103,14 +108,14 @@ export default function SalesPage() {
 }
 
 function SalesTab({
-  items, page, pageSize, onPageChange, credit, onReturn,
+  items, page, pageSize, onPageChange, credit, onEdit,
 }: {
   items: Sale[];
   page: number;
   pageSize: number;
   onPageChange: (p: number) => void;
   credit?: boolean;
-  onReturn: (sale: Sale) => void;
+  onEdit: (sale: Sale) => void;
 }) {
   const { t } = useT();
   const qc = useQueryClient();
@@ -163,6 +168,16 @@ function SalesTab({
                 : <div className="text-xs text-success">+{fmtMoney(s.profit)}</div>}
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0 cursor-pointer"
+                onClick={() => onEdit(s)}
+                title="Edit Sale"
+              >
+                <Pencil className="size-3.5 text-muted-foreground hover:text-foreground" />
+              </Button>
               <Button
                 size="sm"
                 variant="ghost"

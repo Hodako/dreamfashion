@@ -332,6 +332,9 @@ export default function Dashboard() {
   // profit today
   const profitToday  = filteredSales.filter(s => new Date(s.created_at) >= today).reduce((a, s) => a + Number(s.profit), 0);
   
+  // loss today
+  const lossToday = filteredSales.filter(s => new Date(s.created_at) >= today && Number(s.profit) < 0).reduce((a, s) => a + Math.abs(Number(s.profit)), 0);
+  
   const totalDues = allParties.reduce((sum, p) => {
     if (p.archived) return sum;
     return sum + getPartyOutstanding(p.id);
@@ -675,6 +678,15 @@ export default function Dashboard() {
                       color="bg-emerald-500"
                     />
                   </Link>
+                  <Link href="/losses" className="block">
+                    <KPICard
+                      label={lang === "bn" ? "লোকসান" : "Loss"}
+                      value={fmtMoney(lossToday)}
+                      sub={t("today")}
+                      imageUrl="https://img.icons8.com/clouds/100/loss.png"
+                      color="bg-rose-500"
+                    />
+                  </Link>
                   <KPICard
                     label={t("cash_sale")}
                     value={fmtMoney(cashToday)}
@@ -938,7 +950,7 @@ export default function Dashboard() {
       case "kpis":
         return (
           <div key="kpis" className="space-y-6 col-span-3">
-            <div className="grid grid-cols-5 gap-4">
+            <div className="grid grid-cols-6 gap-4">
               <Link href="/profits" className="block">
                 <KPICard
                   label={t("profit")}
@@ -947,6 +959,16 @@ export default function Dashboard() {
                   imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
                   color="bg-emerald-500"
                   trendUp
+                />
+              </Link>
+              <Link href="/losses" className="block">
+                <KPICard
+                  label={lang === "bn" ? "লোকসান" : "Loss"}
+                  value={fmtMoney(lossToday)}
+                  sub={t("today")}
+                  imageUrl="https://img.icons8.com/clouds/100/loss.png"
+                  color="bg-rose-500"
+                  trendUp={false}
                 />
               </Link>
               {canAccess(perms, "expenses") ? (
