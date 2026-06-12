@@ -14,7 +14,7 @@ import type { Expense } from "@/lib/queries";
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import { useT } from "@/lib/i18n";
 import { fmtMoney, fmtDateTime } from "@/lib/format";
-import { FAB } from "../products/page";
+import { FAB } from "@/components/ui/fab";
 import { toast } from "sonner";
 import { createExpenseFn, deleteExpenseFn } from "@/lib/rpc";
 import { setCachedData, refreshQueries } from "@/lib/optimistic-cache";

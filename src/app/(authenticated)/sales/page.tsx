@@ -15,7 +15,7 @@ import { PaginationBar, paginate } from "@/components/ui/pagination-bar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useT } from "@/lib/i18n";
 import { fmtMoney, fmtDateTime } from "@/lib/format";
-import { FAB } from "../products/page";
+import { FAB } from "@/components/ui/fab";
 import { SaleDialog } from "@/components/sale-dialog";
 import { RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";

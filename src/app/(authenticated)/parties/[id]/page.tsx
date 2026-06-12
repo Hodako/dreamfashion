@@ -398,7 +398,7 @@ function CollectDialog({ partyId, open, onOpenChange }: { partyId: string; open:
     try {
       const saved = await createPaymentFn({ data: { party_id: partyId, amount: amt, note: note || null } });
       setCachedData<Payment[]>(qc, ["payments", partyId], old =>
-        (old ?? []).map(p => (p.id === tempId ? { ...saved, id: saved.id } : p)),
+        (old ?? []).map(p => (p.id === tempId ? { ...saved, id: saved.id } as any : p)),
       );
       await refreshQueries(qc, ["all-payments"]);
     } catch (err: unknown) {

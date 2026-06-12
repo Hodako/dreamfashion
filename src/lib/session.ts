@@ -22,7 +22,7 @@ export async function requireSession(requireActivated = true): Promise<AppSessio
   if (!payload) throw new Error("Unauthorized");
 
   const db = await getDb();
-  const user = await db.collection("users").findOne({ _id: payload.userId });
+  const user = await db.collection("users").findOne({ _id: payload.userId } as any);
   if (!user) throw new Error("Unauthorized");
 
   const role = (user.role as AppSession["role"]) || "owner";
@@ -31,17 +31,17 @@ export async function requireSession(requireActivated = true): Promise<AppSessio
 
   const businessId = (user.business_id as string) || null;
   if (businessId) {
-    const biz = await db.collection("businesses").findOne({ _id: businessId });
+    const biz = await db.collection("businesses").findOne({ _id: businessId } as any);
     if (biz && biz.status === "suspended") {
       throw new Error("Business suspended. Please contact administrator.");
     }
   }
 
-  const ownerId = role === "employee" ? (user.owner_id as string) : (user._id as string);
+  const ownerId = role === "employee" ? (user.owner_id as string) : (user._id as any as string);
   const permissions = (user.permissions as PermissionSet) || (role === "owner" ? OWNER_PERMISSIONS : {});
 
   return {
-    userId: user._id as string,
+    userId: user._id as any as string,
     ownerId,
     email: user.email as string,
     role,

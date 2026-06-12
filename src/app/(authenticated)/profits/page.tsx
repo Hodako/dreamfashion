@@ -84,20 +84,6 @@ export default function ProfitPage() {
       map[key].sales += Number(s.sell_price) * s.qty;
     }
     
-    // Subtract return profits
-    for (const r of filteredReturns) {
-      // Find matching sale for profit margin adjustment if available
-      const date = new Date(r.created_at);
-      const key = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      if (!map[key]) map[key] = { date: key, dateObj: date, profit: 0, sales: 0, expenses: 0 };
-      
-      const matchingSale = (sales.data ?? []).find(s => s.id === r.sale_id);
-      if (matchingSale) {
-        const profitPerUnit = (matchingSale.profit as number) / (matchingSale.qty as number);
-        map[key].profit -= profitPerUnit * r.qty;
-      }
-    }
-    
     // Subtract expenses
     for (const e of filteredExpenses) {
       const date = new Date(e.created_at);
@@ -108,7 +94,7 @@ export default function ProfitPage() {
     }
     
     return Object.values(map).sort((a, b) => +a.dateObj - +b.dateObj);
-  }, [filteredSales, filteredExpenses, filteredReturns, sales.data]);
+  }, [filteredSales, filteredExpenses]);
 
   // Aggregated totals
   const totalSalesRevenue = useMemo(() => {
@@ -116,18 +102,8 @@ export default function ProfitPage() {
   }, [filteredSales]);
 
   const totalSalesProfit = useMemo(() => {
-    const grossProfit = filteredSales.reduce((sum, s) => sum + (s.returned ? 0 : Number(s.profit)), 0);
-    // Deduct returns profit
-    const returnsDeduction = filteredReturns.reduce((sum, r) => {
-      const matchingSale = (sales.data ?? []).find(s => s.id === r.sale_id);
-      if (matchingSale) {
-        const profitPerUnit = (matchingSale.profit as number) / (matchingSale.qty as number);
-        return sum + (profitPerUnit * r.qty);
-      }
-      return sum;
-    }, 0);
-    return Math.max(grossProfit - returnsDeduction, 0);
-  }, [filteredSales, filteredReturns, sales.data]);
+    return filteredSales.reduce((sum, s) => sum + (s.returned ? 0 : Number(s.profit)), 0);
+  }, [filteredSales]);
 
   const totalCostOfGoods = useMemo(() => {
     return Math.max(totalSalesRevenue - totalSalesProfit, 0);

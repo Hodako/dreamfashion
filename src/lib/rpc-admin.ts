@@ -13,7 +13,7 @@ async function ensureSuperAdmin() {
   const exists = await db.collection("super_admins").findOne({ username: "superadmin" });
   if (!exists) {
     await db.collection("super_admins").insertOne({
-      _id: "superadmin",
+      _id: "superadmin" as any,
       username: "superadmin",
       password: await hashPassword("superadmin123"),
       created_at: new Date().toISOString(),
@@ -75,18 +75,18 @@ export async function generatePlatformLicenseFn(input: { data: { employeeLimit?:
     used_by: null,
     created_at: new Date().toISOString(),
   };
-  await db.collection("licenses").insertOne(doc);
+  await db.collection("licenses").insertOne(doc as any);
   return { key, employee_limit: doc.employee_limit };
 }
 
-export async function listPlatformLicensesFn() {
+export async function listPlatformLicensesFn(): Promise<any[]> {
   await requireSuperAdminSession();
   const db = await getDb();
   const items = await db.collection("licenses").find({ type: "platform" }).sort({ created_at: -1 }).limit(100).toArray();
-  return items.map(l => ({ ...l, id: l._id as string }));
+  return items.map(l => ({ ...l, id: l._id as any as string }));
 }
 
-export async function listBusinessesFn() {
+export async function listBusinessesFn(): Promise<any[]> {
   await requireSuperAdminSession();
   const db = await getDb();
   const items = await db.collection("businesses").find({}).sort({ created_at: -1 }).limit(100).toArray();
@@ -102,7 +102,7 @@ export async function listBusinessesFn() {
     const saleCount = await db.collection("sales").countDocuments({ owner_id: ownerId });
     results.push({
       ...b,
-      id: b._id as string,
+      id: b._id as any as string,
       owner_email: ownerMap.get(ownerId) || "No owner email",
       product_count: productCount,
       sale_count: saleCount,
@@ -112,7 +112,7 @@ export async function listBusinessesFn() {
   return results;
 }
 
-export async function getPlatformStatsFn() {
+export async function getPlatformStatsFn(): Promise<any> {
   await requireSuperAdminSession();
   const db = await getDb();
   
@@ -156,7 +156,7 @@ export async function getPlatformStatsFn() {
   };
 }
 
-export async function getPlatformActivitiesFn() {
+export async function getPlatformActivitiesFn(): Promise<any[]> {
   await requireSuperAdminSession();
   const db = await getDb();
 
@@ -165,7 +165,7 @@ export async function getPlatformActivitiesFn() {
   const idToBiz: Record<string, string> = {};
   for (const b of allBiz) {
     ownerToBiz[b.owner_id as string] = (b.name as string) || "Unknown Business";
-    idToBiz[b._id as string] = (b.name as string) || "Unknown Business";
+    idToBiz[b._id as any as string] = (b.name as string) || "Unknown Business";
   }
 
   const recentSales = await db.collection("sales").find({}).sort({ created_at: -1 }).limit(30).toArray();
@@ -221,7 +221,7 @@ export async function getPlatformActivitiesFn() {
   }
 
   for (const u of recentUsers) {
-    if (u._id === "superadmin") continue;
+    if ((u._id as any) === "superadmin") continue;
     events.push({
       id: u._id,
       type: "user",
@@ -242,7 +242,7 @@ export async function suspendBusinessFn(input: { data: { businessId: string; sus
   await requireSuperAdminSession();
   const db = await getDb();
   await db.collection("businesses").updateOne(
-    { _id: data.businessId },
+    { _id: data.businessId as any },
     { $set: { status: data.suspend ? "suspended" : "active" } }
   );
   return { success: true };
@@ -253,7 +253,7 @@ export async function deleteBusinessFn(input: { data: { businessId: string } }) 
   await requireSuperAdminSession();
   const db = await getDb();
 
-  const biz = await db.collection("businesses").findOne({ _id: data.businessId });
+  const biz = await db.collection("businesses").findOne({ _id: data.businessId as any });
   if (!biz) throw new Error("Business not found");
 
   const ownerId = biz.owner_id;
@@ -269,7 +269,7 @@ export async function deleteBusinessFn(input: { data: { businessId: string } }) 
   await db.collection("parties").deleteMany({ owner_id: ownerId });
   await db.collection("reminders").deleteMany({ owner_id: ownerId });
   await db.collection("licenses").deleteMany({ business_id: data.businessId });
-  await db.collection("businesses").deleteOne({ _id: data.businessId });
+  await db.collection("businesses").deleteOne({ _id: data.businessId as any });
 
   return { success: true };
 }
@@ -282,7 +282,7 @@ export async function activateLicenseFn(input: { data: { licenseKey: string } })
   if (session.activated) throw new Error("Already activated");
 
   const db = await getDb();
-  const license = await db.collection("licenses").findOne({ _id: data.licenseKey.trim().toUpperCase() });
+  const license = await db.collection("licenses").findOne({ _id: data.licenseKey.trim().toUpperCase() as any });
   if (!license) throw new Error("Invalid license key");
   if (license.used) throw new Error("License already used");
 
@@ -291,7 +291,7 @@ export async function activateLicenseFn(input: { data: { licenseKey: string } })
   if (license.type === "platform") {
     const businessId = crypto.randomUUID();
     await db.collection("businesses").insertOne({
-      _id: businessId,
+      _id: businessId as any,
       owner_id: session.userId,
       name: DEFAULT_COMPANY,
       logo_url: "/logo.png",
@@ -301,7 +301,7 @@ export async function activateLicenseFn(input: { data: { licenseKey: string } })
       created_at: now,
     });
     await db.collection("users").updateOne(
-      { _id: session.userId },
+      { _id: session.userId as any },
       {
         $set: {
           activated: true,
@@ -326,7 +326,7 @@ export async function activateLicenseFn(input: { data: { licenseKey: string } })
       throw new Error("Employee limit reached for this business");
     }
     await db.collection("users").updateOne(
-      { _id: session.userId },
+      { _id: session.userId as any },
       {
         $set: {
           activated: true,
@@ -357,13 +357,13 @@ export async function getBusinessSettingsFn() {
   const session = await requireSession();
   const db = await getDb();
   let business = session.businessId
-    ? await db.collection("businesses").findOne({ _id: session.businessId })
+    ? await db.collection("businesses").findOne({ _id: session.businessId as any })
     : await db.collection("businesses").findOne({ owner_id: session.ownerId });
 
   if (!business && session.role === "owner") {
     const id = crypto.randomUUID();
     business = {
-      _id: id,
+      _id: id as any,
       owner_id: session.ownerId,
       name: DEFAULT_COMPANY,
       logo_url: "/logo.png",
@@ -372,24 +372,24 @@ export async function getBusinessSettingsFn() {
       employee_limit: 5,
       created_at: new Date().toISOString(),
     };
-    await db.collection("businesses").insertOne(business);
-    await db.collection("users").updateOne({ _id: session.userId }, { $set: { business_id: id } });
+    await db.collection("businesses").insertOne(business as any);
+    await db.collection("users").updateOne({ _id: session.userId as any }, { $set: { business_id: id } });
   }
 
   const employees = await db.collection("users")
-    .find({ business_id: business?._id, role: "employee" })
+    .find({ business_id: business?._id as any, role: "employee" })
     .project({ password: 0 })
     .toArray();
 
   const employeeLicenses = await db.collection("licenses")
-    .find({ type: "employee", business_id: business?._id })
+    .find({ type: "employee", business_id: business?._id as any })
     .sort({ created_at: -1 })
     .limit(50)
     .toArray();
 
   return {
     business: business ? {
-      id: business._id as string,
+      id: business._id as any as string,
       name: business.name as string,
       logo_url: (business.logo_url as string) || "/logo.png",
       business_type: (business.business_type as string) || "retail",
@@ -405,14 +405,14 @@ export async function getBusinessSettingsFn() {
     role: session.role,
     permissions: session.permissions,
     employees: employees.map(e => ({
-      id: e._id as string,
+      id: e._id as any as string,
       email: e.email as string,
       full_name: (e.full_name as string) || "",
       activated: Boolean(e.activated),
       permissions: e.permissions as PermissionSet,
     })),
     employeeLicenses: employeeLicenses.map(l => ({
-      id: l._id as string,
+      id: l._id as any as string,
       used: Boolean(l.used),
       used_by: l.used_by as string | null,
       created_at: l.created_at as string,
@@ -441,7 +441,7 @@ export async function updateBusinessSettingsFn(input: {
   const db = await getDb();
   const business = await db.collection("businesses").findOne({ owner_id: session.ownerId });
   if (!business) throw new Error("Business not found");
-  await db.collection("businesses").updateOne({ _id: business._id }, { $set: data });
+  await db.collection("businesses").updateOne({ _id: business._id as any }, { $set: data });
   return { success: true };
 }
 
@@ -455,7 +455,7 @@ export async function createEmployeeLicenseFn(input: { data: { permissions?: Per
 
   const usedCount = await db.collection("licenses").countDocuments({
     type: "employee",
-    business_id: business._id,
+    business_id: business._id as any,
   });
   if (usedCount >= (business.employee_limit as number)) {
     throw new Error("Employee license limit reached. Increase limit in settings.");
@@ -463,9 +463,9 @@ export async function createEmployeeLicenseFn(input: { data: { permissions?: Per
 
   const key = generateLicenseKey("EMP");
   await db.collection("licenses").insertOne({
-    _id: key,
+    _id: key as any,
     type: "employee",
-    business_id: business._id,
+    business_id: business._id as any,
     owner_id: session.ownerId,
     permissions: data.permissions || DEFAULT_EMPLOYEE_PERMISSIONS,
     used: false,
@@ -481,7 +481,7 @@ export async function updateEmployeePermissionsFn(input: { data: { employeeId: s
   if (session.role !== "owner") throw new Error("Only owner can update permissions");
   const db = await getDb();
   await db.collection("users").updateOne(
-    { _id: data.employeeId, owner_id: session.ownerId, role: "employee" },
+    { _id: data.employeeId as any, owner_id: session.ownerId, role: "employee" },
     { $set: { permissions: data.permissions } },
   );
   return { success: true };
@@ -491,7 +491,7 @@ export async function deleteLicenseFn(input: { data: { licenseKey: string } }) {
   const { data } = input;
   const db = await getDb();
   const key = data.licenseKey.trim().toUpperCase();
-  const license = await db.collection("licenses").findOne({ _id: key });
+  const license = await db.collection("licenses").findOne({ _id: key as any });
   if (!license) {
     // License already deleted or never existed - consider deletion successful
     // This handles race conditions where license appears in UI list but
@@ -510,6 +510,6 @@ export async function deleteLicenseFn(input: { data: { licenseKey: string } }) {
     throw new Error("Invalid license type");
   }
 
-  await db.collection("licenses").deleteOne({ _id: key });
+  await db.collection("licenses").deleteOne({ _id: key as any });
   return { success: true };
 }

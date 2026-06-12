@@ -46,7 +46,7 @@ function RangePill({ label, active, onClick }: { label: string; active: boolean;
   );
 }
 
-function kindLabel(t: (k: string) => string, kind: CashboxEntry["kind"]) {
+function kindLabel(t: (k: any) => string, kind: CashboxEntry["kind"]) {
   if (kind === "sale") return t("sales");
   if (kind === "expense") return t("expense");
   if (kind === "deposit") return t("add_money");
@@ -110,7 +110,7 @@ export default function CashboxDetailsPage() {
       : [["Date", "Time", "Type", "Note", "Amount", "Direction"]];
     filtered.forEach(e => {
       const d = new Date(e.created_at);
-      let typeLabel = e.kind;
+      let typeLabel: string = e.kind;
       if (langCode === "bn") {
         if (e.kind === "deposit") typeLabel = "জমা";
         else if (e.kind === "withdraw") typeLabel = "উত্তোলন";

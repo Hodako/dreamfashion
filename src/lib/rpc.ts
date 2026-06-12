@@ -25,7 +25,7 @@ async function insertCashboxEntry(
     ref_id: entry.ref_id ?? null,
     created_at: new Date().toISOString(),
   };
-  await db.collection("cashbox_entries").insertOne(doc);
+  await db.collection("cashbox_entries").insertOne(doc as any);
 
   // Sheets Sync
   appendRowToGoogleSheet(ownerId, "Cashbox",
@@ -43,13 +43,13 @@ function saleCashboxAmount(data: { type: string; sell_price: number; qty: number
 }
 
 async function mapUser(db: Awaited<ReturnType<typeof getDb>>, userId: string) {
-  const user = await db.collection("users").findOne({ _id: userId });
+  const user = await db.collection("users").findOne({ _id: userId as any });
   if (!user) return null;
   const business = user.business_id
-    ? await db.collection("businesses").findOne({ _id: user.business_id })
+    ? await db.collection("businesses").findOne({ _id: user.business_id as any })
     : null;
   return {
-    id: user._id as string,
+    id: user._id as any as string,
     email: user.email as string,
     full_name: (user.full_name as string) || "",
     activated: user.activated === false ? false : Boolean(user.activated ?? true),
@@ -86,10 +86,10 @@ export async function loginFn(input: { data: { email: string; password: string }
   if (!user || !(await comparePassword(data.password, user.password as string))) {
     throw new Error("Invalid email or password");
   }
-  const token = await signToken({ userId: user._id as string, email: user.email as string });
+  const token = await signToken({ userId: user._id as any as string, email: user.email as string });
   const cookieStore = await cookies();
   cookieStore.set("token", token, { maxAge: 30 * 24 * 60 * 60, httpOnly: true, sameSite: "lax", path: "/" });
-  const mapped = await mapUser(db, user._id as string);
+  const mapped = await mapUser(db, user._id as any as string);
   return { user: mapped };
 }
 
@@ -100,7 +100,7 @@ export async function registerFn(input: { data: { email: string; password: strin
   if (existing) throw new Error("User already exists");
   const userId = crypto.randomUUID();
   await db.collection("users").insertOne({
-    _id: userId,
+    _id: userId as any,
     email: data.email.toLowerCase(),
     password: await hashPassword(data.password),
     full_name: data.fullName || "",
@@ -127,7 +127,7 @@ export async function getProductsFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("products").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).toArray();
-  return items.map((p) => ({ ...p, id: p._id as string }));
+  return items.map((p) => ({ ...p, id: p._id as any as string }));
 }
 
 export async function createProductFn(input: { data: { name: string; image_url?: string | null; buy_price?: number; sell_price?: number; stock?: number; attributes?: Record<string, string>; min_stock?: number; category?: string } }) {
@@ -136,7 +136,7 @@ export async function createProductFn(input: { data: { name: string; image_url?:
   const db = await getDb();
   const id = crypto.randomUUID();
   const doc = { _id: id, owner_id: session.ownerId, name: data.name, image_url: data.image_url || null, buy_price: data.buy_price || 0, sell_price: data.sell_price || 0, stock: data.stock || 0, attributes: data.attributes || {}, min_stock: data.min_stock ?? 5, category: data.category || "", archived: false, created_at: new Date().toISOString() };
-  await db.collection("products").insertOne(doc);
+  await db.collection("products").insertOne(doc as any);
 
   // Sheets Sync
   appendRowToGoogleSheet(session.ownerId, "Products",
@@ -152,8 +152,8 @@ export async function updateProductFn(input: { data: { id: string; name?: string
   const session = await requireSession();
   const { id, ...updates } = data;
   const db = await getDb();
-  await db.collection("products").updateOne({ _id: id, owner_id: session.ownerId }, { $set: updates });
-  const updated = await db.collection("products").findOne({ _id: id });
+  await db.collection("products").updateOne({ _id: id as any, owner_id: session.ownerId }, { $set: updates });
+  const updated = await db.collection("products").findOne({ _id: id as any });
   return { ...updated, id };
 }
 
@@ -161,7 +161,7 @@ export async function deleteProductFn(input: { data: { id: string } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  await db.collection("products").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  await db.collection("products").deleteOne({ _id: data.id as any, owner_id: session.ownerId });
   return { success: true };
 }
 
@@ -169,7 +169,7 @@ export async function archiveProductFn(input: { data: { id: string; archived: bo
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  await db.collection("products").updateOne({ _id: data.id, owner_id: session.ownerId }, { $set: { archived: data.archived } });
+  await db.collection("products").updateOne({ _id: data.id as any, owner_id: session.ownerId }, { $set: { archived: data.archived } });
   return { success: true };
 }
 
@@ -179,7 +179,7 @@ export async function getPartiesFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("parties").find({ owner_id: session.ownerId }).sort({ name: 1 }).toArray();
-  return items.map((p) => ({ ...p, id: p._id as string }));
+  return items.map((p) => ({ ...p, id: p._id as any as string }));
 }
 
 export async function createPartyFn(input: { data: { name: string; phone?: string | null } }) {
@@ -188,7 +188,7 @@ export async function createPartyFn(input: { data: { name: string; phone?: strin
   const db = await getDb();
   const id = crypto.randomUUID();
   const doc = { _id: id, owner_id: session.ownerId, name: data.name, phone: data.phone || null, created_at: new Date().toISOString() };
-  await db.collection("parties").insertOne(doc);
+  await db.collection("parties").insertOne(doc as any);
   return { ...doc, id };
 }
 
@@ -197,8 +197,8 @@ export async function updatePartyFn(input: { data: { id: string; name?: string; 
   const session = await requireSession();
   const { id, ...updates } = data;
   const db = await getDb();
-  await db.collection("parties").updateOne({ _id: id, owner_id: session.ownerId }, { $set: updates });
-  const updated = await db.collection("parties").findOne({ _id: id });
+  await db.collection("parties").updateOne({ _id: id as any, owner_id: session.ownerId }, { $set: updates });
+  const updated = await db.collection("parties").findOne({ _id: id as any });
   return { ...updated, id };
 }
 
@@ -206,7 +206,7 @@ export async function deletePartyFn(input: { data: { id: string } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  await db.collection("parties").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  await db.collection("parties").deleteOne({ _id: data.id as any, owner_id: session.ownerId });
   return { success: true };
 }
 
@@ -214,7 +214,7 @@ export async function archivePartyFn(input: { data: { id: string; archived: bool
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  await db.collection("parties").updateOne({ _id: data.id, owner_id: session.ownerId }, { $set: { archived: data.archived } });
+  await db.collection("parties").updateOne({ _id: data.id as any, owner_id: session.ownerId }, { $set: { archived: data.archived } });
   return { success: true };
 }
 
@@ -222,9 +222,9 @@ export async function getPartyFn(input: { data: { id: string } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  const p = await db.collection("parties").findOne({ _id: data.id, owner_id: session.ownerId });
+  const p = await db.collection("parties").findOne({ _id: data.id as any, owner_id: session.ownerId });
   if (!p) return null;
-  return { ...p, id: p._id as string };
+  return { ...p, id: p._id as any as string };
 }
 
 export async function createPartyReceivableFn(input: { data: { party_id: string; amount: number; note?: string | null } }) {
@@ -233,7 +233,7 @@ export async function createPartyReceivableFn(input: { data: { party_id: string;
   const db = await getDb();
   const id = crypto.randomUUID();
   const doc = { _id: id, owner_id: session.ownerId, party_id: data.party_id, amount: data.amount, note: data.note || null, created_at: new Date().toISOString() };
-  await db.collection("party_receivables").insertOne(doc);
+  await db.collection("party_receivables").insertOne(doc as any);
   return { ...doc, id };
 }
 
@@ -243,7 +243,7 @@ export async function createPartyPayableFn(input: { data: { party_id: string; am
   const db = await getDb();
   const id = crypto.randomUUID();
   const doc = { _id: id, owner_id: session.ownerId, party_id: data.party_id, amount: data.amount, note: data.note || null, created_at: new Date().toISOString() };
-  await db.collection("party_payables").insertOne(doc);
+  await db.collection("party_payables").insertOne(doc as any);
   return { ...doc, id };
 }
 
@@ -251,21 +251,21 @@ export async function getAllPartyReceivablesFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("party_receivables").find({ owner_id: session.ownerId }).toArray();
-  return items.map((r) => ({ ...r, id: r._id as string }));
+  return items.map((r) => ({ ...r, id: r._id as any as string }));
 }
 
 export async function getAllPartyPayablesFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("party_payables").find({ owner_id: session.ownerId }).toArray();
-  return items.map((p) => ({ ...p, id: p._id as string }));
+  return items.map((p) => ({ ...p, id: p._id as any as string }));
 }
 
 export async function getAllPayableSettlementsFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("party_payable_settlements").find({ owner_id: session.ownerId }).toArray();
-  return items.map((s) => ({ ...s, id: s._id as string }));
+  return items.map((s) => ({ ...s, id: s._id as any as string }));
 }
 
 export async function getPartyReceivablesFn(input: { data: { partyId: string } }) {
@@ -273,7 +273,7 @@ export async function getPartyReceivablesFn(input: { data: { partyId: string } }
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("party_receivables").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
-  return items.map((r) => ({ ...r, id: r._id as string }));
+  return items.map((r) => ({ ...r, id: r._id as any as string }));
 }
 
 export async function getPartyPayablesFn(input: { data: { partyId: string } }) {
@@ -281,14 +281,14 @@ export async function getPartyPayablesFn(input: { data: { partyId: string } }) {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("party_payables").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
-  return items.map((r) => ({ ...r, id: r._id as string }));
+  return items.map((r) => ({ ...r, id: r._id as any as string }));
 }
 
 export async function deletePartyReceivableFn(input: { data: { id: string } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  await db.collection("party_receivables").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  await db.collection("party_receivables").deleteOne({ _id: data.id as any, owner_id: session.ownerId });
   return { success: true };
 }
 
@@ -296,7 +296,7 @@ export async function deletePartyPayableFn(input: { data: { id: string } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  await db.collection("party_payables").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  await db.collection("party_payables").deleteOne({ _id: data.id as any, owner_id: session.ownerId });
   return { success: true };
 }
 
@@ -306,10 +306,10 @@ export async function createPayableSettlementFn(input: { data: { party_id: strin
   const db = await getDb();
   const id = crypto.randomUUID();
   const doc = { _id: id, owner_id: session.ownerId, party_id: data.party_id, amount: data.amount, note: data.note || null, created_at: new Date().toISOString() };
-  await db.collection("party_payable_settlements").insertOne(doc);
+  await db.collection("party_payable_settlements").insertOne(doc as any);
 
   // Also insert cashbox entry when paying a party
-  const party = await db.collection("parties").findOne({ _id: data.party_id, owner_id: session.ownerId });
+  const party = await db.collection("parties").findOne({ _id: data.party_id as any, owner_id: session.ownerId });
   const partyName = party ? (party.name || "Party") : "Party";
   await insertCashboxEntry(db, session.ownerId, {
     kind: "withdraw",
@@ -326,7 +326,7 @@ export async function getPayableSettlementsFn(input: { data: { partyId: string }
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("party_payable_settlements").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
-  return items.map((r) => ({ ...r, id: r._id as string }));
+  return items.map((r) => ({ ...r, id: r._id as any as string }));
 }
 
 // ─── Sales ───────────────────────────────────────────────────────────────────
@@ -335,7 +335,7 @@ export async function getSalesFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("sales").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
-  return items.map((s) => ({ ...s, id: s._id as string }));
+  return items.map((s) => ({ ...s, id: s._id as any as string }));
 }
 
 export async function getSalesForPartyFn(input: { data: { partyId: string } }) {
@@ -343,7 +343,7 @@ export async function getSalesForPartyFn(input: { data: { partyId: string } }) {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("sales").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
-  return items.map((s) => ({ ...s, id: s._id as string }));
+  return items.map((s) => ({ ...s, id: s._id as any as string }));
 }
 
 export async function createSaleFn(input: { data: { product_id?: string | null; product_name: string; qty: number; buy_price: number; sell_price: number; profit: number; type: string; party_id?: string | null; paid_amount: number; due_amount: number; note?: string | null } }) {
@@ -352,10 +352,10 @@ export async function createSaleFn(input: { data: { product_id?: string | null; 
   const db = await getDb();
   const id = crypto.randomUUID();
   const doc = { _id: id, owner_id: session.ownerId, ...data, party_id: data.type === "credit" ? data.party_id : null, created_at: new Date().toISOString() };
-  await db.collection("sales").insertOne(doc);
+  await db.collection("sales").insertOne(doc as any);
   if (data.product_id) {
-    const product = await db.collection("products").findOne({ _id: data.product_id });
-    if (product) await db.collection("products").updateOne({ _id: data.product_id }, { $set: { stock: Math.max(((product.stock as number) ?? 0) - data.qty, 0) } });
+    const product = await db.collection("products").findOne({ _id: data.product_id as any });
+    if (product) await db.collection("products").updateOne({ _id: data.product_id as any }, { $set: { stock: Math.max(((product.stock as number) ?? 0) - data.qty, 0) } });
   }
   const cashAmt = saleCashboxAmount(data);
   if (cashAmt > 0) {
@@ -381,56 +381,56 @@ export async function deleteSaleFn(input: { data: { id: string } }) {
     const { data } = input;
     const session = await requireSession();
     const db = await getDb();
-    const sale = await db.collection("sales").findOne({ _id: data.id, owner_id: session.ownerId });
+    const sale = await db.collection("sales").findOne({ _id: data.id as any, owner_id: session.ownerId });
     if (!sale) throw new Error("Sale not found");
-
+ 
     if (sale.product_id) {
       const qtyToRestore = sale.returned ? 0 : (Number(sale.qty) || 0);
       if (qtyToRestore > 0) {
         await db.collection("products").updateOne(
-          { _id: sale.product_id, owner_id: session.ownerId },
+          { _id: sale.product_id as any, owner_id: session.ownerId },
           { $inc: { stock: qtyToRestore } }
         );
       }
     }
-
+ 
     // Clean up associated returns for this sale
     await db.collection("returns").deleteMany({ sale_id: data.id, owner_id: session.ownerId });
-
+ 
     // Clean up cashbox entries for this sale and its returns
     await db.collection("cashbox_entries").deleteMany({ owner_id: session.ownerId, ref_id: data.id });
     
-    await db.collection("sales").deleteOne({ _id: data.id, owner_id: session.ownerId });
+    await db.collection("sales").deleteOne({ _id: data.id as any, owner_id: session.ownerId });
     return { success: true };
   } catch (err: any) {
     console.error("Error in deleteSaleFn:", err);
     return { success: false, error: err.message || String(err) };
   }
 }
-
+ 
 export async function updateUserAvatarFn(input: { data: { avatar_url: string } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
   await db.collection("users").updateOne(
-    { _id: session.userId },
+    { _id: session.userId as any },
     { $set: { avatar_url: data.avatar_url } }
   );
   const user = await mapUser(db, session.userId);
   return { user };
 }
-
+ 
 export async function createReturnFn(input: { data: { sale_id: string; qty: number; note?: string | null } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  const sale = await db.collection("sales").findOne({ _id: data.sale_id, owner_id: session.ownerId });
+  const sale = await db.collection("sales").findOne({ _id: data.sale_id as any, owner_id: session.ownerId });
   if (!sale) throw new Error("Sale not found");
   if (!sale.product_id) throw new Error("Cannot return non-product sale");
   if (sale.returned) throw new Error("Already returned");
   const returnQty = Math.min(data.qty, sale.qty as number);
   if (returnQty <= 0) throw new Error("Invalid quantity");
-
+ 
   const id = crypto.randomUUID();
   const profitPerUnit = (sale.profit as number) / (sale.qty as number);
   const doc = {
@@ -438,22 +438,22 @@ export async function createReturnFn(input: { data: { sale_id: string; qty: numb
     product_id: sale.product_id, product_name: sale.product_name,
     qty: returnQty, note: data.note || null, created_at: new Date().toISOString(),
   };
-  await db.collection("returns").insertOne(doc);
-
-  const product = await db.collection("products").findOne({ _id: sale.product_id });
+  await db.collection("returns").insertOne(doc as any);
+ 
+  const product = await db.collection("products").findOne({ _id: sale.product_id as any });
   if (product) {
     await db.collection("products").updateOne(
-      { _id: sale.product_id },
+      { _id: sale.product_id as any },
       { $set: { stock: ((product.stock as number) ?? 0) + returnQty } },
     );
   }
-
+ 
   if (returnQty >= (sale.qty as number)) {
-    await db.collection("sales").updateOne({ _id: data.sale_id }, { $set: { returned: true, return_qty: returnQty } });
+    await db.collection("sales").updateOne({ _id: data.sale_id as any }, { $set: { returned: true, return_qty: returnQty } });
   } else {
     const remaining = (sale.qty as number) - returnQty;
     await db.collection("sales").updateOne(
-      { _id: data.sale_id },
+      { _id: data.sale_id as any },
       { $set: { qty: remaining, profit: profitPerUnit * remaining, return_qty: returnQty } },
     );
   }
@@ -464,7 +464,7 @@ export async function createDirectProductReturnFn(input: { data: { product_id: s
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  const product = await db.collection("products").findOne({ _id: data.product_id, owner_id: session.ownerId });
+  const product = await db.collection("products").findOne({ _id: data.product_id as any, owner_id: session.ownerId });
   if (!product) throw new Error("Product not found");
   
   const returnQty = Number(data.qty);
@@ -482,10 +482,10 @@ export async function createDirectProductReturnFn(input: { data: { product_id: s
     note: data.note || null,
     created_at: new Date().toISOString(),
   };
-  await db.collection("returns").insertOne(doc);
+  await db.collection("returns").insertOne(doc as any);
 
   await db.collection("products").updateOne(
-    { _id: data.product_id, owner_id: session.ownerId },
+    { _id: data.product_id as any, owner_id: session.ownerId },
     { $set: { stock: ((product.stock as number) ?? 0) + returnQty } }
   );
 
@@ -506,7 +506,7 @@ export async function getReturnsFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("returns").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
-  return items.map((r) => ({ ...r, id: r._id as string }));
+  return items.map((r) => ({ ...r, id: r._id as any as string }));
 }
 
 export async function deleteReturnFn(input: { data: { id: string } }) {
@@ -515,7 +515,7 @@ export async function deleteReturnFn(input: { data: { id: string } }) {
     const session = await requireSession();
     const db = await getDb();
 
-    const ret = await db.collection("returns").findOne({ _id: data.id, owner_id: session.ownerId });
+    const ret = await db.collection("returns").findOne({ _id: data.id as any, owner_id: session.ownerId });
     if (!ret) throw new Error("Return record not found");
 
     if (ret.product_id) {
@@ -529,7 +529,7 @@ export async function deleteReturnFn(input: { data: { id: string } }) {
     }
 
     if (ret.sale_id) {
-      const sale = await db.collection("sales").findOne({ _id: ret.sale_id, owner_id: session.ownerId });
+      const sale = await db.collection("sales").findOne({ _id: ret.sale_id as any, owner_id: session.ownerId });
       if (sale) {
         const originalQty = (sale.qty as number) + (ret.qty as number);
         const buyPrice = Number(sale.buy_price) || 0;
@@ -537,7 +537,7 @@ export async function deleteReturnFn(input: { data: { id: string } }) {
         const updatedProfit = (sellPrice - buyPrice) * originalQty;
 
         await db.collection("sales").updateOne(
-          { _id: ret.sale_id },
+          { _id: ret.sale_id as any },
           {
             $set: {
               returned: false,
@@ -553,7 +553,7 @@ export async function deleteReturnFn(input: { data: { id: string } }) {
     }
 
     await db.collection("cashbox_entries").deleteMany({ owner_id: session.ownerId, ref_id: data.id });
-    await db.collection("returns").deleteOne({ _id: data.id, owner_id: session.ownerId });
+    await db.collection("returns").deleteOne({ _id: data.id as any, owner_id: session.ownerId });
 
     return { success: true };
   } catch (err: any) {
@@ -568,7 +568,7 @@ export async function getPurchasesFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("purchases").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
-  return items.map((p) => ({ ...p, id: p._id as string }));
+  return items.map((p) => ({ ...p, id: p._id as any as string }));
 }
 
 export async function createPurchaseFn(input: { data: { product_id?: string | null; product_name: string; qty: number; unit_cost: number; sell_price?: number; total: number; note?: string | null } }) {
@@ -577,9 +577,9 @@ export async function createPurchaseFn(input: { data: { product_id?: string | nu
   const db = await getDb();
   const id = crypto.randomUUID();
   const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
-  await db.collection("purchases").insertOne(doc);
+  await db.collection("purchases").insertOne(doc as any);
   if (data.product_id) {
-    const product = await db.collection("products").findOne({ _id: data.product_id });
+    const product = await db.collection("products").findOne({ _id: data.product_id as any });
     if (product) {
       const updates: Record<string, number> = {
         stock: ((product.stock as number) ?? 0) + data.qty,
@@ -588,7 +588,7 @@ export async function createPurchaseFn(input: { data: { product_id?: string | nu
       if (data.sell_price != null && data.sell_price > 0) {
         updates.sell_price = data.sell_price;
       }
-      await db.collection("products").updateOne({ _id: data.product_id }, { $set: updates });
+      await db.collection("products").updateOne({ _id: data.product_id as any }, { $set: updates });
     }
   }
 
@@ -605,18 +605,18 @@ export async function deletePurchaseFn(input: { data: { id: string } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  const purchase = await db.collection("purchases").findOne({ _id: data.id, owner_id: session.ownerId });
+  const purchase = await db.collection("purchases").findOne({ _id: data.id as any, owner_id: session.ownerId });
   if (!purchase) throw new Error("Purchase not found");
   if (purchase.product_id) {
-    const product = await db.collection("products").findOne({ _id: purchase.product_id });
+    const product = await db.collection("products").findOne({ _id: purchase.product_id as any });
     if (product) {
       await db.collection("products").updateOne(
-        { _id: purchase.product_id },
+        { _id: purchase.product_id as any },
         { $set: { stock: Math.max(((product.stock as number) ?? 0) - (purchase.qty as number), 0) } },
       );
     }
   }
-  await db.collection("purchases").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  await db.collection("purchases").deleteOne({ _id: data.id as any, owner_id: session.ownerId });
   return { success: true };
 }
 
@@ -626,7 +626,7 @@ export async function getExpensesFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("expenses").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
-  return items.map((e) => ({ ...e, id: e._id as string }));
+  return items.map((e) => ({ ...e, id: e._id as any as string }));
 }
 
 export async function createExpenseFn(input: { data: { title: string; amount: number; note?: string | null } }) {
@@ -635,7 +635,7 @@ export async function createExpenseFn(input: { data: { title: string; amount: nu
   const db = await getDb();
   const id = crypto.randomUUID();
   const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
-  await db.collection("expenses").insertOne(doc);
+  await db.collection("expenses").insertOne(doc as any);
   await insertCashboxEntry(db, session.ownerId, {
     kind: "expense",
     amount: data.amount,
@@ -657,25 +657,25 @@ export async function deleteExpenseFn(input: { data: { id: string } }) {
   const session = await requireSession();
   const db = await getDb();
   await db.collection("cashbox_entries").deleteOne({ owner_id: session.ownerId, ref_id: data.id, kind: "expense" });
-  await db.collection("expenses").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  await db.collection("expenses").deleteOne({ _id: data.id as any, owner_id: session.ownerId });
   return { success: true };
 }
 
 // ─── Payments ─────────────────────────────────────────────────────────────────
 
-export async function getPaymentsForPartyFn(input: { data: { partyId: string } }) {
+export async function getPaymentsForPartyFn(input: { data: { partyId: string } }): Promise<any[]> {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("payments").find({ owner_id: session.ownerId, party_id: data.partyId }).sort({ created_at: -1 }).toArray();
-  return items.map((p) => ({ ...p, id: p._id as string }));
+  return items.map((p) => ({ ...p, id: p._id as any as string }));
 }
 
-export async function getAllPaymentsFn() {
+export async function getAllPaymentsFn(): Promise<any[]> {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("payments").find({ owner_id: session.ownerId }).toArray();
-  return items.map((p) => ({ ...p, id: p._id as string }));
+  return items.map((p) => ({ ...p, id: p._id as any as string }));
 }
 
 export async function createPaymentFn(input: { data: { party_id: string; amount: number; note?: string | null } }) {
@@ -684,10 +684,10 @@ export async function createPaymentFn(input: { data: { party_id: string; amount:
   const db = await getDb();
   const id = crypto.randomUUID();
   const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
-  await db.collection("payments").insertOne(doc);
+  await db.collection("payments").insertOne(doc as any);
 
   // Also insert cashbox entry when party pays
-  const party = await db.collection("parties").findOne({ _id: data.party_id, owner_id: session.ownerId });
+  const party = await db.collection("parties").findOne({ _id: data.party_id, owner_id: session.ownerId } as any);
   const partyName = party ? (party.name || "Party") : "Party";
   await insertCashboxEntry(db, session.ownerId, {
     kind: "deposit",
@@ -703,8 +703,8 @@ export async function deletePaymentFn(input: { data: { id: string } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  await db.collection("cashbox_entries").deleteMany({ owner_id: session.ownerId, ref_id: data.id });
-  await db.collection("payments").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  await db.collection("cashbox_entries").deleteMany({ owner_id: session.ownerId, ref_id: data.id } as any);
+  await db.collection("payments").deleteOne({ _id: data.id, owner_id: session.ownerId } as any);
   return { success: true };
 }
 
@@ -714,7 +714,7 @@ export async function getSomitiFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("somiti_entries").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
-  return items.map((s) => ({ ...s, id: s._id as string }));
+  return items.map((s) => ({ ...s, id: s._id as any as string }));
 }
 
 export async function createSomitiFn(input: { data: { kind: string; amount: number; note?: string | null } }) {
@@ -723,7 +723,7 @@ export async function createSomitiFn(input: { data: { kind: string; amount: numb
   const db = await getDb();
   const id = crypto.randomUUID();
   const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
-  await db.collection("somiti_entries").insertOne(doc);
+  await db.collection("somiti_entries").insertOne(doc as any);
   return { ...doc, id };
 }
 
@@ -733,10 +733,10 @@ export async function updateSomitiFn(input: { data: { id: string; kind: string; 
   const db = await getDb();
   const { id, ...updates } = data;
   await db.collection("somiti_entries").updateOne(
-    { _id: id, owner_id: session.ownerId },
+    { _id: id as any, owner_id: session.ownerId },
     { $set: updates }
   );
-  const updated = await db.collection("somiti_entries").findOne({ _id: id });
+  const updated = await db.collection("somiti_entries").findOne({ _id: id as any });
   return { ...updated, id };
 }
 
@@ -744,7 +744,7 @@ export async function deleteSomitiFn(input: { data: { id: string } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  await db.collection("somiti_entries").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  await db.collection("somiti_entries").deleteOne({ _id: data.id as any, owner_id: session.ownerId });
   return { success: true };
 }
 
@@ -754,7 +754,7 @@ export async function getWithdrawalsFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("owner_withdrawals").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
-  return items.map((w) => ({ ...w, id: w._id as string }));
+  return items.map((w) => ({ ...w, id: w._id as any as string }));
 }
 
 export async function createWithdrawalFn(input: { data: { amount: number; note?: string | null } }) {
@@ -763,7 +763,7 @@ export async function createWithdrawalFn(input: { data: { amount: number; note?:
   const db = await getDb();
   const id = crypto.randomUUID();
   const doc = { _id: id, owner_id: session.ownerId, ...data, created_at: new Date().toISOString() };
-  await db.collection("owner_withdrawals").insertOne(doc);
+  await db.collection("owner_withdrawals").insertOne(doc as any);
   return { ...doc, id };
 }
 
@@ -773,7 +773,7 @@ export async function getCashboxFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("cashbox_entries").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).limit(200).toArray();
-  return items.map((e) => ({ ...e, id: e._id as string }));
+  return items.map((e) => ({ ...e, id: e._id as any as string }));
 }
 
 export async function createCashboxFn(input: { data: { kind: "deposit" | "withdraw"; amount: number; note?: string | null } }) {
@@ -810,7 +810,7 @@ export async function getRemindersFn() {
   const session = await requireSession();
   const db = await getDb();
   const items = await db.collection("reminders").find({ owner_id: session.ownerId }).sort({ created_at: -1 }).toArray();
-  return items.map((r) => ({ ...r, id: r._id as string }));
+  return items.map((r) => ({ ...r, id: r._id as any as string }));
 }
 
 export async function createReminderFn(input: { data: { title: string; due_date: string; logic_type?: string; logic_config?: any } }) {
@@ -828,7 +828,7 @@ export async function createReminderFn(input: { data: { title: string; due_date:
     completed: false,
     created_at: new Date().toISOString(),
   };
-  await db.collection("reminders").insertOne(doc);
+  await db.collection("reminders").insertOne(doc as any);
   return { ...doc, id };
 }
 
@@ -836,7 +836,7 @@ export async function toggleReminderFn(input: { data: { id: string; completed: b
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  await db.collection("reminders").updateOne({ _id: data.id, owner_id: session.ownerId }, { $set: { completed: data.completed } });
+  await db.collection("reminders").updateOne({ _id: data.id as any, owner_id: session.ownerId }, { $set: { completed: data.completed } });
   return { success: true };
 }
 
@@ -844,7 +844,7 @@ export async function deleteReminderFn(input: { data: { id: string } }) {
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  await db.collection("reminders").deleteOne({ _id: data.id, owner_id: session.ownerId });
+  await db.collection("reminders").deleteOne({ _id: data.id as any, owner_id: session.ownerId });
   return { success: true };
 }
 
@@ -852,15 +852,15 @@ export async function deletePayableSettlementFn(input: { data: { id: string } })
   const { data } = input;
   const session = await requireSession();
   const db = await getDb();
-  await db.collection("party_payable_settlements").deleteOne({ _id: data.id, owner_id: session.ownerId });
-  await db.collection("cashbox_entries").deleteMany({ ref_id: data.id, owner_id: session.ownerId });
+  await db.collection("party_payable_settlements").deleteOne({ _id: data.id as any, owner_id: session.ownerId });
+  await db.collection("cashbox_entries").deleteMany({ ref_id: data.id as any, owner_id: session.ownerId });
   return { success: true };
 }
 
 export async function verifyOwnerPasswordFn(input: { data: { password: string } }) {
   const session = await requireSession();
   const db = await getDb();
-  const user = await db.collection("users").findOne({ _id: session.userId });
+  const user = await db.collection("users").findOne({ _id: session.userId as any });
   if (!user) throw new Error("User not found");
   const match = await comparePassword(input.data.password, user.password as string);
   if (!match) throw new Error("Incorrect password");

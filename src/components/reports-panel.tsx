@@ -49,7 +49,7 @@ export function ReportsPanel() {
   const { data: sales = [] } = useCachedQuery(["sales"], getSales, { enabled: canView });
   const { data: purchases = [] } = useCachedQuery(["purchases"], getPurchases, { enabled: canView });
 
-  const filteredSales = useMemo(() => sales.filter(s => inRange(s.created_at, from, to)), [sales, from, to]);
+  const filteredSales = useMemo(() => sales.filter(s => !s.returned && inRange(s.created_at, from, to)), [sales, from, to]);
   const filteredPurchases = useMemo(() => purchases.filter(p => inRange(p.created_at, from, to)), [purchases, from, to]);
 
   const salesTotal = filteredSales.reduce((a, s) => a + Number(s.sell_price) * s.qty, 0);

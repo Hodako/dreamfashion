@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { getSomiti } from "@/lib/queries";
 import { useT } from "@/lib/i18n";
 import { fmtMoney, fmtDateTime } from "@/lib/format";
-import { FAB } from "../products/page";
+import { FAB } from "@/components/ui/fab";
 import { toast } from "sonner";
 import { createSomitiFn, updateSomitiFn, deleteSomitiFn } from "@/lib/rpc";
 import {

@@ -52,7 +52,7 @@ export default function DuesPage() {
   // Dialog States
   const [collectOpen, setCollectOpen] = useState(false);
   const [addDueOpen, setAddDueOpen] = useState(false);
-  const [selectedParty, setSelectedParty] = useState<Party | null>(null);
+  const [selectedParty, setSelectedParty] = useState<any | null>(null);
 
   // Form Inputs
   const [amount, setAmount] = useState("");

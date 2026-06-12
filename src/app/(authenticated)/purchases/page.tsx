@@ -13,7 +13,7 @@ import type { Purchase } from "@/lib/queries";
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import { useT } from "@/lib/i18n";
 import { fmtMoney, fmtDateTime } from "@/lib/format";
-import { FAB } from "../products/page";
+import { FAB } from "@/components/ui/fab";
 import { PurchaseDialog } from "@/components/purchase-dialog";
 import { deletePurchaseFn } from "@/lib/rpc";
 import { toast } from "sonner";

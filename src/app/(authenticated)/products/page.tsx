@@ -3,6 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import { PaginationBar, paginate } from "@/components/ui/pagination-bar";
+import { FAB } from "@/components/ui/fab";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Plus, Pencil, Trash2, Search, Archive, Download, Eye, AlertCircle, MoreVertical, ShoppingCart, Minus, X } from "lucide-react";
@@ -570,15 +571,6 @@ export default function ProductsPage() {
   );
 }
 
-export function FAB({ onClick }: { onClick: () => void }) {
-  return (
-    <button onClick={onClick}
-      className="fixed mobile-fab-bottom right-3 z-20 size-10 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-lg shadow-primary/25 beveled-button active:scale-95 transition">
-      <Plus className="size-4.5" />
-    </button>
-  );
-}
-
 function ProductCard({
   p,
   isLowStock,
@@ -600,7 +592,7 @@ function ProductCard({
   onRestore: () => void;
   onDelete: () => void;
   onLongPress: () => void;
-  t: (k: string) => string;
+  t: (k: any) => string;
 }) {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 

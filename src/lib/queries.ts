@@ -71,26 +71,26 @@ export type Reminder = {
 };
 
 // ─── Query functions (called by react-query) ─────────────────────────────────
-export const getProducts = () => getProductsFn() as Promise<Product[]>;
-export const getParties = () => getPartiesFn() as Promise<Party[]>;
-export const getParty = (id: string) => getPartyFn({ data: { id } }) as Promise<Party | null>;
-export const getSales = () => getSalesFn() as Promise<Sale[]>;
-export const getPurchases = () => getPurchasesFn() as Promise<Purchase[]>;
-export const getExpenses = () => getExpensesFn() as Promise<Expense[]>;
-export const getSomiti = () => getSomitiFn() as Promise<Somiti[]>;
-export const getWithdrawals = () => getWithdrawalsFn() as Promise<Withdrawal[]>;
-export const getCashbox = () => getCashboxFn() as Promise<CashboxEntry[]>;
-export const getSalesForParty = (partyId: string) => getSalesForPartyFn({ data: { partyId } }) as Promise<Sale[]>;
-export const getPaymentsForParty = (partyId: string) => getPaymentsForPartyFn({ data: { partyId } }) as Promise<Payment[]>;
-export const getAllPayments = () => getAllPaymentsFn() as Promise<Payment[]>;
-export const getAllPartyReceivables = () => getAllPartyReceivablesFn() as Promise<PartyLedger[]>;
-export const getAllPartyPayables = () => getAllPartyPayablesFn() as Promise<PartyLedger[]>;
-export const getAllPayableSettlements = () => getAllPayableSettlementsFn() as Promise<PartyLedger[]>;
-export const getPartyReceivables = (partyId: string) => getPartyReceivablesFn({ data: { partyId } }) as Promise<PartyLedger[]>;
-export const getPartyPayables = (partyId: string) => getPartyPayablesFn({ data: { partyId } }) as Promise<PartyLedger[]>;
-export const getPayableSettlements = (partyId: string) => getPayableSettlementsFn({ data: { partyId } }) as Promise<PartyLedger[]>;
-export const getReturns = () => getReturnsFn() as Promise<Return[]>;
-export const getReminders = () => getRemindersFn() as Promise<Reminder[]>;
+export const getProducts = () => getProductsFn() as unknown as Promise<Product[]>;
+export const getParties = () => getPartiesFn() as unknown as Promise<Party[]>;
+export const getParty = (id: string) => getPartyFn({ data: { id } }) as unknown as Promise<Party | null>;
+export const getSales = () => getSalesFn() as unknown as Promise<Sale[]>;
+export const getPurchases = () => getPurchasesFn() as unknown as Promise<Purchase[]>;
+export const getExpenses = () => getExpensesFn() as unknown as Promise<Expense[]>;
+export const getSomiti = () => getSomitiFn() as unknown as Promise<Somiti[]>;
+export const getWithdrawals = () => getWithdrawalsFn() as unknown as Promise<Withdrawal[]>;
+export const getCashbox = () => getCashboxFn() as unknown as Promise<CashboxEntry[]>;
+export const getSalesForParty = (partyId: string) => getSalesForPartyFn({ data: { partyId } }) as unknown as Promise<Sale[]>;
+export const getPaymentsForParty = (partyId: string) => getPaymentsForPartyFn({ data: { partyId } }) as unknown as Promise<Payment[]>;
+export const getAllPayments = () => getAllPaymentsFn() as unknown as Promise<Payment[]>;
+export const getAllPartyReceivables = () => getAllPartyReceivablesFn() as unknown as Promise<PartyLedger[]>;
+export const getAllPartyPayables = () => getAllPartyPayablesFn() as unknown as Promise<PartyLedger[]>;
+export const getAllPayableSettlements = () => getAllPayableSettlementsFn() as unknown as Promise<PartyLedger[]>;
+export const getPartyReceivables = (partyId: string) => getPartyReceivablesFn({ data: { partyId } }) as unknown as Promise<PartyLedger[]>;
+export const getPartyPayables = (partyId: string) => getPartyPayablesFn({ data: { partyId } }) as unknown as Promise<PartyLedger[]>;
+export const getPayableSettlements = (partyId: string) => getPayableSettlementsFn({ data: { partyId } }) as unknown as Promise<PartyLedger[]>;
+export const getReturns = () => getReturnsFn() as unknown as Promise<Return[]>;
+export const getReminders = () => getRemindersFn() as unknown as Promise<Reminder[]>;
 
 /** In ImgBB configuration, the path is already a direct URL string. */
 export async function signedImage(path: string | null): Promise<string | null> {

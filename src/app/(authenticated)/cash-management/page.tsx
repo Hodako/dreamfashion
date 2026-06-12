@@ -15,6 +15,13 @@ import { useT } from "@/lib/i18n";
 import { fmtMoney, fmtDate } from "@/lib/format";
 import { cashboxBalance } from "@/lib/cashbox-utils";
 import { Wallet, TrendingUp, AlertCircle, Receipt, Download, Code, ArrowUp, ArrowDown, ChevronRight, Banknote } from "lucide-react";
+import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function ChartTip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) {
   if (!active || !payload?.length) return null;
@@ -94,7 +101,7 @@ export default function CashManagementPage() {
 
   const inRange = (d: string) => { const dt = new Date(d); return dt >= from && dt <= to; };
 
-  const filtSales = useMemo(() => (sales.data ?? []).filter(s => inRange(s.created_at)), [sales.data, from, to]);
+  const filtSales = useMemo(() => (sales.data ?? []).filter(s => !s.returned && inRange(s.created_at)), [sales.data, from, to]);
   const filtExp = useMemo(() => (expenses.data ?? []).filter(e => inRange(e.created_at)), [expenses.data, from, to]);
   const filtWith = useMemo(() => (withdrawals.data ?? []).filter(w => inRange(w.created_at)), [withdrawals.data, from, to]);
 
@@ -142,11 +149,11 @@ export default function CashManagementPage() {
       : [["Date", "Type", "Product", "Qty", "Amount", "Profit"]];
 
     filtSales.forEach(s => {
-      let typeLabel = s.type;
+      let typeLabel: string = s.type;
       if (langCode === "bn") {
-        typeLabel = s.type === "retail" ? "খুচরা বিক্রয়" : "পাইকারি বিক্রয়";
+        typeLabel = s.type === "cash" ? "নগদ বিক্রয়" : s.type === "credit" ? "বাকী বিক্রয়" : "অনলাইন বিক্রয়";
       } else {
-        typeLabel = s.type === "retail" ? "Retail Sale" : "Wholesale Sale";
+        typeLabel = s.type === "cash" ? "Cash Sale" : s.type === "credit" ? "Credit Sale" : "Online Sale";
       }
       rows.push([
         new Date(s.created_at).toLocaleDateString(langCode === "bn" ? "bn-BD" : "en-US"),

@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { getSales } from "@/lib/queries";
 import { useT } from "@/lib/i18n";
 import { fmtMoney, fmtDateTime } from "@/lib/format";
-import { FAB } from "../products/page";
+import { FAB } from "@/components/ui/fab";
 import { SaleDialog } from "@/components/sale-dialog";
 
 
@@ -41,7 +41,7 @@ export default function OnlineSellsPage() {
           />
         </TabsContent>
       </Tabs>
-      <FAB onClick={() => setOpen(true)} presetType="online" />
+      <FAB onClick={() => setOpen(true)} />
       <SaleDialog open={open} onOpenChange={setOpen} presetType="online" />
     </div>
   );

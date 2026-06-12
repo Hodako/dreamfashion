@@ -119,7 +119,7 @@ export default function TrackbackPage() {
   const parties = useCachedQuery(["parties"], getParties);
 
   const filteredSales = useMemo(
-    () => (sales.data ?? []).filter(s => inRange(s.created_at, range, from, to)),
+    () => (sales.data ?? []).filter(s => !s.returned && inRange(s.created_at, range, from, to)),
     [sales.data, range, from, to],
   );
 

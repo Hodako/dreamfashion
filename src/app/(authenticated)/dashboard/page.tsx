@@ -63,6 +63,7 @@ function groupAllDataByDay(sales: any[], expenses: any[], days: number) {
 
   // Populate sales and profit
   for (const s of sales) {
+    if (s.returned) continue;
     if (new Date(s.created_at) < from) continue;
     const key = dayLabel(s.created_at);
     if (result[key]) {
@@ -289,6 +290,7 @@ export default function Dashboard() {
 
   // Compute filtered data based on date filter (if any)
   const filteredSales = allSales.filter(s => {
+    if (s.returned) return false;
     const d = new Date(s.created_at);
     const showToday = !dateFilter.from && !dateFilter.to;
     const fromOk = showToday
@@ -549,9 +551,8 @@ export default function Dashboard() {
     }
   }
 
-  // Render chart conditionally
-  const ChartComponent = chartType === "bar" ? BarChart : chartType === "line" ? LineChart : AreaChart;
-  const ChartDataElement = chartType === "bar" ? Bar : chartType === "line" ? Line : Area;
+  const ChartComponent: any = chartType === "bar" ? BarChart : chartType === "line" ? LineChart : AreaChart;
+  const ChartDataElement: any = chartType === "bar" ? Bar : chartType === "line" ? Line : Area;
 
   const getMetricColor = () => {
     if (chartMetric === "profit") return "#10b981";
