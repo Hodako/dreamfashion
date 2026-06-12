@@ -161,7 +161,13 @@ export default function ProductsPage() {
   const { items: productsToShow, totalPages, safePage } = paginate(sortedProducts, page, pageSize);
 
   async function remove(p: Product) {
-    if (!confirm(`${t("delete")}: ${p.name}?`)) return;
+    const input = prompt(`Are you sure you want to delete product "${p.name}"? This is permanent. Please type "Delete" to confirm:`);
+    if (input !== "Delete") {
+      if (input !== null) {
+        toast.error('You must type "Delete" to confirm deletion.');
+      }
+      return;
+    }
     try {
       await deleteProductFn({ data: { id: p.id } });
       toast.success(t("delete"));

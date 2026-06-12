@@ -117,7 +117,13 @@ function SalesTab({
   const { items: paged, totalPages, safePage } = paginate(items, page, pageSize);
 
   async function handleDelete(id: string) {
-    if (!confirm(t("delete") + "?")) return;
+    const input = prompt(`Are you sure you want to delete this sale? This is permanent. Please type "Delete" to confirm:`);
+    if (input !== "Delete") {
+      if (input !== null) {
+        toast.error('You must type "Delete" to confirm deletion.');
+      }
+      return;
+    }
     try {
       const res = await deleteSaleFn({ data: { id } });
       if (res && !res.success && 'error' in res) {
@@ -157,11 +163,6 @@ function SalesTab({
                 : <div className="text-xs text-success">+{fmtMoney(s.profit)}</div>}
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
-              {s.product_id && !s.returned && (
-                <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => onReturn(s)}>
-                  <RotateCcw className="size-3.5" />
-                </Button>
-              )}
               <Button
                 size="sm"
                 variant="ghost"

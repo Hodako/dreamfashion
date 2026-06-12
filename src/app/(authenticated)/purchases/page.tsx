@@ -37,7 +37,13 @@ export default function PurchasesPage() {
   }, [filteredPurchases]);
 
   async function handleDelete(purchase: Purchase) {
-    if (!confirm(`${t("delete")} ${purchase.product_name}?`)) return;
+    const input = prompt(`Are you sure you want to delete purchase "${purchase.product_name}"? This is permanent. Please type "Delete" to confirm:`);
+    if (input !== "Delete") {
+      if (input !== null) {
+        toast.error('You must type "Delete" to confirm deletion.');
+      }
+      return;
+    }
     setCachedData<Purchase[]>(qc, ["purchases"], old => (old ?? []).filter(p => p.id !== purchase.id));
     try {
       await deletePurchaseFn({ data: { id: purchase.id } });

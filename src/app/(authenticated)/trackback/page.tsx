@@ -51,7 +51,13 @@ export default function TrackbackPage() {
   const pageSize = 15;
 
   async function handleDeleteSale(id: string) {
-    if (!confirm(t("delete") + "?")) return;
+    const input = prompt(`Are you sure you want to delete this sale? This is permanent. Please type "Delete" to confirm:`);
+    if (input !== "Delete") {
+      if (input !== null) {
+        toast.error('You must type "Delete" to confirm deletion.');
+      }
+      return;
+    }
     try {
       const res = await deleteSaleFn({ data: { id } });
       if (res && !res.success && 'error' in res) throw new Error(res.error as string);
@@ -66,7 +72,13 @@ export default function TrackbackPage() {
   }
 
   async function handleDeletePurchase(id: string) {
-    if (!confirm(t("delete") + "?")) return;
+    const input = prompt(`Are you sure you want to delete this purchase? This is permanent. Please type "Delete" to confirm:`);
+    if (input !== "Delete") {
+      if (input !== null) {
+        toast.error('You must type "Delete" to confirm deletion.');
+      }
+      return;
+    }
     try {
       const res = await deletePurchaseFn({ data: { id } });
       if (res && !res.success && 'error' in res) throw new Error(res.error as string);
@@ -79,7 +91,13 @@ export default function TrackbackPage() {
   }
 
   async function handleDeleteExpense(id: string) {
-    if (!confirm(t("delete") + "?")) return;
+    const input = prompt(`Are you sure you want to delete this expense? This is permanent. Please type "Delete" to confirm:`);
+    if (input !== "Delete") {
+      if (input !== null) {
+        toast.error('You must type "Delete" to confirm deletion.');
+      }
+      return;
+    }
     try {
       const res = await deleteExpenseFn({ data: { id } });
       if (res && !res.success && 'error' in res) throw new Error(res.error as string);
@@ -92,7 +110,13 @@ export default function TrackbackPage() {
   }
 
   async function handleDeleteReturn(id: string) {
-    if (!confirm(t("delete") + "?")) return;
+    const input = prompt(`Are you sure you want to delete this return? This is permanent. Please type "Delete" to confirm:`);
+    if (input !== "Delete") {
+      if (input !== null) {
+        toast.error('You must type "Delete" to confirm deletion.');
+      }
+      return;
+    }
     try {
       const res = await deleteReturnFn({ data: { id } });
       if (res && !res.success && 'error' in res) throw new Error(res.error as string);

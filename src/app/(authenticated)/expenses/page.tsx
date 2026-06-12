@@ -29,7 +29,13 @@ export default function ExpensesPage() {
   const total = (data ?? []).reduce((a, e) => a + Number(e.amount), 0);
 
   async function handleDelete(expense: Expense) {
-    if (!confirm(`${t("delete")} ${expense.title}?`)) return;
+    const input = prompt(`Are you sure you want to delete expense "${expense.title}"? This is permanent. Please type "Delete" to confirm:`);
+    if (input !== "Delete") {
+      if (input !== null) {
+        toast.error('You must type "Delete" to confirm deletion.');
+      }
+      return;
+    }
     setCachedData<Expense[]>(qc, ["expenses"], old => (old ?? []).filter(e => e.id !== expense.id));
     try {
       await deleteExpenseFn({ data: { id: expense.id } });

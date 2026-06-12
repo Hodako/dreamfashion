@@ -94,7 +94,13 @@ export default function PartyDetail() {
   ].sort((a, b) => +new Date(b.date) - +new Date(a.date));
 
   async function handleDelete(entry: Entry) {
-    if (!confirm(t("delete") + "?")) return;
+    const input = prompt(`Are you sure you want to delete this ${entry.kind}? This is permanent. Please type "Delete" to confirm:`);
+    if (input !== "Delete") {
+      if (input !== null) {
+        toast.error('You must type "Delete" to confirm deletion.');
+      }
+      return;
+    }
     const prevPayments = qc.getQueryData<Payment[]>(["payments", id]);
     const prevSales = qc.getQueryData<Sale[]>(["party-detail", "sales", id]);
     const prevReceivables = qc.getQueryData<PartyLedger[]>(["party-receivables", id]);
@@ -179,7 +185,13 @@ export default function PartyDetail() {
             variant="outline"
             className="text-destructive border-destructive/30"
             onClick={async () => {
-              if (!confirm(t("delete") + ` ${party.name || "Unnamed"}?`)) return;
+              const input = prompt(`Are you sure you want to delete party "${party.name || "Unnamed"}"? This is permanent. Please type "Delete" to confirm:`);
+              if (input !== "Delete") {
+                if (input !== null) {
+                  toast.error('You must type "Delete" to confirm deletion.');
+                }
+                return;
+              }
               const prevParties = qc.getQueryData<Party[]>(["parties"]);
               try {
                 setCachedData<Party[]>(qc, ["parties"], old => (old ?? []).filter(p => p.id !== id));
