@@ -25,6 +25,7 @@ import {
 import { getBusinessSettingsFn } from "@/lib/rpc-admin";
 import { fmtMoney, fmtDateTime } from "@/lib/format";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { playTapSound } from "@/lib/audio";
 
 export default function ReportsGeneratorPage() {
   const { lang, t } = useT();
@@ -46,6 +47,7 @@ export default function ReportsGeneratorPage() {
   const [showCashbox, setShowCashbox] = useState(true);
   const [showSomiti, setShowSomiti] = useState(true);
   const [showParties, setShowParties] = useState(true);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   // Queries
   const { data: bizSettings } = useQuery({ queryKey: ["business-settings"], queryFn: getBusinessSettingsFn });
@@ -143,11 +145,31 @@ export default function ReportsGeneratorPage() {
   }, [filteredSales, filteredPurchases, filteredExpenses, from, to]);
 
   const handlePrint = () => {
-    window.print();
+    playTapSound();
+    setIsGeneratingPDF(true);
+    setTimeout(() => {
+      setIsGeneratingPDF(false);
+      window.print();
+    }, 1500);
   };
 
   return (
     <div className="space-y-6 pb-12">
+      {isGeneratingPDF && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background/85 backdrop-blur-md animate-in fade-in duration-200 print:hidden">
+          <div className="flex flex-col items-center gap-3 p-6 rounded-xl border bg-card shadow-lg max-w-xs text-center beveled-card">
+            <RefreshCw className="size-8 text-primary animate-spin" />
+            <h3 className="font-semibold text-sm">
+              {lang === "bn" ? "পিডিএফ রিপোর্ট তৈরি হচ্ছে" : "Generating PDF Report"}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {lang === "bn"
+                ? "অনুগ্রহ করে অপেক্ষা করুন, প্রিন্ট প্রিভিউ প্রস্তুত করা হচ্ছে..."
+                : "Please wait, preparing print preview..."}
+            </p>
+          </div>
+        </div>
+      )}
       {/* SCREEN VIEW (hidden when printing) */}
       <div className="print:hidden space-y-6">
         {/* Screen Controls Header (hidden during printing) */}

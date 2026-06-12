@@ -27,6 +27,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { toast } from "sonner";
 import { createReminderFn, toggleReminderFn, deleteReminderFn } from "@/lib/rpc";
 import { SaleDialog } from "@/components/sale-dialog";
+import { playTapSound } from "@/lib/audio";
 
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -205,6 +206,9 @@ export default function Dashboard() {
   // Recent Activity Limit state
   const [activityLimit, setActivityLimit] = useState(5);
 
+  // Best Selling Limit state
+  const [bestSellingLimit, setBestSellingLimit] = useState(5);
+
   // Collapsible sections on mobile
   const [collapsed, setCollapsed] = useState({
     kpis: false,
@@ -355,10 +359,11 @@ export default function Dashboard() {
   filteredSales.forEach(s => {
     productQtyMap[s.product_name] = (productQtyMap[s.product_name] ?? 0) + s.qty;
   });
-  const topDemandedProducts = Object.entries(productQtyMap)
+  const allDemandedProducts = Object.entries(productQtyMap)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
     .map(([name, value]) => ({ name, value }));
+
+  const topDemandedProducts = allDemandedProducts.slice(0, bestSellingLimit);
 
   // Custom graph data
   const customGraphData = groupAllDataByDay(allSales, allExpenses, chartRange);
@@ -941,10 +946,23 @@ export default function Dashboard() {
               {topDemandedProducts.map((p, i) => (
                 <div key={p.name} className="flex justify-between items-center text-xs p-1 px-2 bg-secondary/40 rounded">
                   <span className="truncate">{i+1}. {p.name}</span>
-                  <span className="font-bold">{p.value} units</span>
+                  <span className="font-bold">{p.value} {lang === "bn" ? "টি" : "units"}</span>
                 </div>
               ))}
             </div>
+            {allDemandedProducts.length > topDemandedProducts.length && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-[10px] h-7 hover:bg-accent border border-dashed border-border/60 mt-2 active:scale-95 transition-all"
+                onClick={() => {
+                  playTapSound();
+                  setBestSellingLimit(prev => prev + 5);
+                }}
+              >
+                {lang === "bn" ? "আরও দেখুন ↓" : "View More ↓"}
+              </Button>
+            )}
           </Card>
         ) : null;
 
@@ -1221,21 +1239,38 @@ export default function Dashboard() {
       case "bestSelling":
         return (
           <div key="bestSelling" className="col-span-1">
-            <Card className="p-5 h-full bg-card/65 backdrop-blur-sm beveled-card">
-              <h2 className="text-sm font-semibold mb-4">{t("best_selling")} (Revenue)</h2>
-              {topDemandedProducts.length === 0 ? (
-                <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">{t("no_activity")}</div>
-              ) : (
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={topDemandedProducts} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 9 }} tickFormatter={v => `৳${v}`} />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={80} />
-                    <Tooltip formatter={(v: any) => `৳${Number(v).toLocaleString()}`} />
-                    <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} name="Sales revenue" />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
+            <Card className="p-5 h-full bg-card/65 backdrop-blur-sm beveled-card flex flex-col justify-between">
+              <div>
+                <h2 className="text-sm font-semibold mb-4">{t("best_selling")} ({lang === "bn" ? "পরিমাণ" : "Qty"})</h2>
+                {topDemandedProducts.length === 0 ? (
+                  <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">{t("no_activity")}</div>
+                ) : (
+                  <>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={topDemandedProducts} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 9 }} tickFormatter={v => `${v} ${lang === "bn" ? "টি" : "u"}`} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={80} />
+                        <Tooltip formatter={(v: any) => [`${Number(v).toLocaleString()} ${lang === "bn" ? "টি" : "units"}`, lang === "bn" ? "বিক্রির পরিমাণ" : "Sales quantity"]} />
+                        <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} name={lang === "bn" ? "বিক্রির পরিমাণ" : "Sales quantity"} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                    {allDemandedProducts.length > topDemandedProducts.length && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs h-8 hover:bg-accent border border-dashed border-border/60 mt-4 active:scale-95 transition-all"
+                        onClick={() => {
+                          playTapSound();
+                          setBestSellingLimit(prev => prev + 5);
+                        }}
+                      >
+                        {lang === "bn" ? "আরও দেখুন ↓" : "View More ↓"}
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
             </Card>
           </div>
         );

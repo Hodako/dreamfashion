@@ -13,7 +13,7 @@ import { useT } from "@/lib/i18n";
 import { fmtMoney, fmtDateTime } from "@/lib/format";
 import { FAB } from "@/components/ui/fab";
 import { toast } from "sonner";
-import { createSomitiFn, updateSomitiFn, deleteSomitiFn } from "@/lib/rpc";
+import { createSomitiFn, updateSomitiFn, deleteSomitiFn, renameSomitiFn, deleteSomitiFnByName } from "@/lib/rpc";
 import { playTapSound } from "@/lib/audio";
 import {
   DropdownMenu,
@@ -33,6 +33,8 @@ export default function SomitiPage() {
   // Navigation / Tabs state
   const [selectedTab, setSelectedTab] = useState<"samities" | "ledger">("samities");
   const [selectedSamity, setSelectedSamity] = useState<string | null>(null);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [samityToRename, setSamityToRename] = useState<string | null>(null);
 
   // Total balance of all Somitis combined
   const totalBalance = useMemo(() => {
@@ -104,6 +106,27 @@ export default function SomitiPage() {
       qc.invalidateQueries({ queryKey: ["somiti"] });
     } catch (err: any) {
       toast.error(err.message || "Failed to delete");
+    }
+  }
+
+  async function handleDeleteSamityByName(name: string) {
+    playTapSound();
+    const confirmed = confirm(
+      lang === "bn" 
+        ? `আপনি কি নিশ্চিত যে আপনি "${name}" এবং এর অধীনে থাকা সমস্ত লেনদেন মুছে ফেলতে চান?` 
+        : `Are you sure you want to delete "${name}" and all its associated transactions?`
+    );
+    if (!confirmed) return;
+    try {
+      await deleteSomitiFnByName({ data: { name } });
+      toast.success(
+        lang === "bn" 
+          ? `সফলভাবে "${name}" মুছে ফেলা হয়েছে` 
+          : `Deleted "${name}" successfully`
+      );
+      qc.invalidateQueries({ queryKey: ["somiti"] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete samity");
     }
   }
 
@@ -236,10 +259,51 @@ export default function SomitiPage() {
                   }
                 </div>
               </div>
-              <div className="text-right">
-                <div className={`font-bold text-sm ${s.balance >= 0 ? "text-emerald-600 dark:text-emerald-500" : "text-rose-600 dark:text-rose-500"}`}>
-                  {s.balance >= 0 ? "+" : ""}{fmtMoney(s.balance)}
+              <div className="flex items-center gap-2">
+                <div className="text-right">
+                  <div className={`font-bold text-sm ${s.balance >= 0 ? "text-emerald-600 dark:text-emerald-500" : "text-rose-600 dark:text-rose-500"}`}>
+                    {s.balance >= 0 ? "+" : ""}{fmtMoney(s.balance)}
+                  </div>
                 </div>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 rounded-full text-muted-foreground hover:bg-muted active:scale-95 transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        playTapSound();
+                      }}
+                    >
+                      <MoreVertical className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-32" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        playTapSound();
+                        setSamityToRename(s.name);
+                        setRenameOpen(true);
+                      }}
+                      className="text-xs"
+                    >
+                      <Pencil className="size-3 mr-1.5" /> {lang === "bn" ? "নাম পরিবর্তন" : "Rename"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        playTapSound();
+                        handleDeleteSamityByName(s.name);
+                      }}
+                      className="text-xs text-destructive focus:bg-destructive/10 focus:text-destructive"
+                    >
+                      <Trash2 className="size-3 mr-1.5" /> {lang === "bn" ? "মুছে ফেলুন" : "Delete"}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </Card>
           ))}
@@ -324,6 +388,18 @@ export default function SomitiPage() {
         entry={editingEntry}
         prefilledSamityName={selectedSamity || undefined}
         uniqueSamityNames={uniqueSamityNames}
+      />
+
+      <RenameDialog
+        open={renameOpen}
+        onOpenChange={(val) => {
+          setRenameOpen(val);
+          if (!val) setSamityToRename(null);
+        }}
+        oldName={samityToRename}
+        onRenameSuccess={() => {
+          qc.invalidateQueries({ queryKey: ["somiti"] });
+        }}
       />
     </div>
   );
@@ -467,6 +543,85 @@ function SomitiDialog({
             />
           </div>
 
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => { playTapSound(); onOpenChange(false); }}
+            >
+              {t("cancel")}
+            </Button>
+            <Button type="submit" disabled={busy}>
+              {busy ? "…" : t("save")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RenameDialog({
+  open,
+  onOpenChange,
+  oldName,
+  onRenameSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  oldName: string | null;
+  onRenameSuccess: () => void;
+}) {
+  const { t, lang } = useT();
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (open && oldName) {
+      setNewName(oldName);
+    }
+  }, [open, oldName]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    playTapSound();
+    if (!newName.trim() || !oldName) return;
+
+    setBusy(true);
+    try {
+      await renameSomitiFn({
+        data: {
+          oldName: oldName.trim(),
+          newName: newName.trim(),
+        },
+      });
+      toast.success(lang === "bn" ? "সফলভাবে নাম পরিবর্তন করা হয়েছে" : "Renamed successfully");
+      onRenameSuccess();
+      onOpenChange(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to rename");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(val) => { playTapSound(); onOpenChange(val); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{lang === "bn" ? "সমিতির নাম পরিবর্তন" : "Rename Samity"}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">{lang === "bn" ? "নতুন নাম" : "New Name"}</Label>
+            <Input
+              required
+              placeholder={lang === "bn" ? "নতুন নাম লিখুন..." : "Enter new name..."}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
+          </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button
               type="button"

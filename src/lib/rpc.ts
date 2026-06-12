@@ -824,6 +824,43 @@ export async function deleteSomitiFn(input: { data: { id: string } }) {
   return { success: true };
 }
 
+export async function renameSomitiFn(input: { data: { oldName: string; newName: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const entries = await db.collection("somiti_entries").find({ owner_id: session.ownerId }).toArray();
+  const prefix = `[${data.oldName}]`;
+  const newPrefix = `[${data.newName}]`;
+  for (const entry of entries) {
+    const note = entry.note || "";
+    if (note.startsWith(prefix)) {
+      const rest = note.slice(prefix.length);
+      const newNote = `${newPrefix}${rest}`;
+      await db.collection("somiti_entries").updateOne(
+        { _id: entry._id },
+        { $set: { note: newNote } }
+      );
+    }
+  }
+  return { success: true };
+}
+
+export async function deleteSomitiFnByName(input: { data: { name: string } }) {
+  const { data } = input;
+  const session = await requireSession();
+  const db = await getDb();
+  const entries = await db.collection("somiti_entries").find({ owner_id: session.ownerId }).toArray();
+  const prefix = `[${data.name}]`;
+  for (const entry of entries) {
+    const note = entry.note || "";
+    if (note.startsWith(prefix)) {
+      await db.collection("somiti_entries").deleteOne({ _id: entry._id });
+    }
+  }
+  return { success: true };
+}
+
+
 // ─── Withdrawals ──────────────────────────────────────────────────────────────
 
 export async function getWithdrawalsFn() {
