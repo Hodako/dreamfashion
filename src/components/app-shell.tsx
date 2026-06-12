@@ -127,7 +127,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         (active.tagName === "INPUT" ||
           active.tagName === "TEXTAREA" ||
           active.tagName === "SELECT" ||
-          active.contentEditable === "true")
+          (active as HTMLElement).contentEditable === "true")
       ) {
         return;
       }

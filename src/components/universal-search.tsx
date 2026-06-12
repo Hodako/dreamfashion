@@ -44,7 +44,7 @@ export function UniversalSearch({ role, permissions }: UniversalSearchProps) {
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const [query, setQuery] = useState("");
 
-  const perms = resolvePermissions(role, permissions);
+  const perms = resolvePermissions(role ?? "employee", permissions);
   const pages = PAGES.filter(p => !p.perm || canAccess(perms, p.perm));
 
   useEffect(() => {

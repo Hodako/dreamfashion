@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 export interface QuickLinkProps {
   to: string;
-  icon: React.ComponentType;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
 }
 
