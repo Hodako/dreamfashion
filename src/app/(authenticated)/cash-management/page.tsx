@@ -136,19 +136,56 @@ export default function CashManagementPage() {
 
   const flowData = dailyData.map(d => ({ date: d.date, আয়: d.cash + d.online, খরচ: -(d.expense) }));
 
-  function exportCSV() {
-    const rows = [["Date", "Type", "Product", "Qty", "Amount", "Profit"]];
-    filtSales.forEach(s => rows.push([
-      new Date(s.created_at).toLocaleDateString(), s.type, s.product_name, String(s.qty),
-      String(Number(s.sell_price) * s.qty), String(s.profit),
-    ]));
-    filtExp.forEach(e => rows.push([new Date(e.created_at).toLocaleDateString(), "Expense", e.title, "1", String(e.amount), "0"]));
-    filtWith.forEach(w => rows.push([new Date(w.created_at).toLocaleDateString(), "Withdrawal", w.note ?? "Owner", "1", String(w.amount), "0"]));
+  function exportCSV(langCode: "en" | "bn") {
+    const rows = langCode === "bn"
+      ? [["তারিখ", "ধরণ", "বিবরণ / পণ্য", "পরিমাণ", "টাকার পরিমাণ", "লাভ"]]
+      : [["Date", "Type", "Product", "Qty", "Amount", "Profit"]];
+
+    filtSales.forEach(s => {
+      let typeLabel = s.type;
+      if (langCode === "bn") {
+        typeLabel = s.type === "retail" ? "খুচরা বিক্রয়" : "পাইকারি বিক্রয়";
+      } else {
+        typeLabel = s.type === "retail" ? "Retail Sale" : "Wholesale Sale";
+      }
+      rows.push([
+        new Date(s.created_at).toLocaleDateString(langCode === "bn" ? "bn-BD" : "en-US"),
+        typeLabel,
+        s.product_name,
+        String(s.qty),
+        String(Number(s.sell_price) * s.qty),
+        String(s.profit),
+      ]);
+    });
+
+    filtExp.forEach(e => {
+      rows.push([
+        new Date(e.created_at).toLocaleDateString(langCode === "bn" ? "bn-BD" : "en-US"),
+        langCode === "bn" ? "খরচ" : "Expense",
+        e.title,
+        "1",
+        String(e.amount),
+        "0"
+      ]);
+    });
+
+    filtWith.forEach(w => {
+      rows.push([
+        new Date(w.created_at).toLocaleDateString(langCode === "bn" ? "bn-BD" : "en-US"),
+        langCode === "bn" ? "উত্তোলন" : "Withdrawal",
+        w.note ?? (langCode === "bn" ? "মালিক" : "Owner"),
+        "1",
+        String(w.amount),
+        "0"
+      ]);
+    });
+
     const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.href = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" }));
     a.download = `cash-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
+    toast.success(langCode === "bn" ? "CSV ফাইল ডাউনলোড সফল হয়েছে!" : "CSV exported successfully!");
   }
 
   function exportJSON() {
@@ -295,9 +332,21 @@ export default function CashManagementPage() {
       </Card>
 
       <div className="flex flex-wrap justify-end gap-2 sm:gap-3">
-        <Button variant="outline" size="sm" onClick={exportCSV}>
-          <Download className="size-4 mr-2" /> {t("export_csv")}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Download className="size-4 mr-2" /> {t("export_csv")}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => exportCSV("en")}>
+              English (ইংরেজি)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => exportCSV("bn")}>
+              Bangla (বাংলা)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button variant="outline" size="sm" onClick={exportJSON}>
           <Code className="size-4 mr-2" /> {t("export_json")}
         </Button>

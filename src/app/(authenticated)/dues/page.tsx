@@ -23,6 +23,12 @@ import { downloadCsv, exportDateStamp } from "@/lib/export";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PaginationBar, paginate } from "@/components/ui/pagination-bar";
 import { Search, Plus, Download, DollarSign, Wallet, Users, ArrowRight } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type DuesTab = "all" | "outstanding" | "settled";
 
@@ -218,8 +224,10 @@ export default function DuesPage() {
   };
 
   // CSV Export
-  const exportCSV = () => {
-    const headers = ["Customer Name", "Phone", "Total Purchases & Manual Dues", "Total Paid", "Outstanding Dues"];
+  const exportCSV = (langCode: "en" | "bn") => {
+    const headers = langCode === "bn"
+      ? ["কাস্টমারের নাম", "ফোন নম্বর", "মোট ক্রয় ও ব্যক্তিগত বাকী", "মোট পরিশোধ", "মোট বকেয়া জমা"]
+      : ["Customer Name", "Phone", "Total Purchases & Manual Dues", "Total Paid", "Outstanding Dues"];
     const rows = sorted.map(p => [
       p.name,
       p.phone || "",
@@ -228,7 +236,7 @@ export default function DuesPage() {
       p.outstanding
     ]);
     downloadCsv(`outstanding_dues_${exportDateStamp()}.csv`, headers, rows);
-    toast.success(t("download_csv"));
+    toast.success(langCode === "bn" ? "CSV ফাইল ডাউনলোড সফল হয়েছে!" : "CSV exported successfully!");
   };
 
   return (
@@ -240,10 +248,22 @@ export default function DuesPage() {
             {lang === "bn" ? `${totalDebtors} জন কাস্টমারের কাছে মোট বকেয়া জমা` : `${totalDebtors} customers with outstanding balances`}
           </p>
         </div>
-        <Button size="sm" variant="outline" className="h-8 text-xs beveled-button" onClick={exportCSV}>
-          <Download className="size-3.5 mr-1" />
-          {t("download_csv")}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline" className="h-8 text-xs beveled-button">
+              <Download className="size-3.5 mr-1" />
+              {t("download_csv")}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => exportCSV("en")}>
+              English (ইংরেজি)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => exportCSV("bn")}>
+              Bangla (বাংলা)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Main KPI Summary Card */}

@@ -1,0 +1,602 @@
+"use client";
+
+import { useMemo, useState, useEffect } from "react";
+import Link from "next/link";
+import {
+  Calendar, Printer, ArrowLeft, FileText,
+  TrendingUp, ShoppingCart, Receipt, PiggyBank,
+  Banknote, Users, CheckSquare, Square, RefreshCw
+} from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid, Legend
+} from "recharts";
+import { useQuery } from "@tanstack/react-query";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useT } from "@/lib/i18n";
+import { useCachedQuery } from "@/hooks/use-cached-query";
+import {
+  getSales, getPurchases, getExpenses,
+  getSomiti, getParties, getCashbox
+} from "@/lib/queries";
+import { getBusinessSettingsFn } from "@/lib/rpc-admin";
+import { fmtMoney, fmtDateTime } from "@/lib/format";
+import { useIsMobile } from "@/hooks/use-mobile";
+
+export default function ReportsGeneratorPage() {
+  const { lang, t } = useT();
+  const isMobile = useIsMobile();
+
+  // Date range state
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [from, setFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().slice(0, 10);
+  });
+  const [to, setTo] = useState(todayStr);
+
+  // Section toggle state
+  const [showSales, setShowSales] = useState(true);
+  const [showPurchases, setShowPurchases] = useState(true);
+  const [showExpenses, setShowExpenses] = useState(true);
+  const [showCashbox, setShowCashbox] = useState(true);
+  const [showSomiti, setShowSomiti] = useState(true);
+  const [showParties, setShowParties] = useState(true);
+
+  // Queries
+  const { data: bizSettings } = useQuery({ queryKey: ["business-settings"], queryFn: getBusinessSettingsFn });
+  const salesQuery = useCachedQuery(["sales"], getSales);
+  const purchasesQuery = useCachedQuery(["purchases"], getPurchases);
+  const expensesQuery = useCachedQuery(["expenses"], getExpenses);
+  const somitiQuery = useCachedQuery(["somiti"], getSomiti);
+  const cashboxQuery = useCachedQuery(["cashbox"], getCashbox);
+  const partiesQuery = useCachedQuery(["parties"], getParties);
+
+  const bizName = bizSettings?.business?.name || "Dream Fashion";
+
+  // Date Range Presets
+  const setPreset = (type: "today" | "week" | "month") => {
+    const end = new Date();
+    const start = new Date();
+    if (type === "today") {
+      // today only
+    } else if (type === "week") {
+      start.setDate(end.getDate() - 7);
+    } else if (type === "month") {
+      start.setDate(end.getDate() - 30);
+    }
+    setFrom(start.toISOString().slice(0, 10));
+    setTo(end.toISOString().slice(0, 10));
+  };
+
+  // Helper date filtering
+  const inDateRange = (dateStr: string) => {
+    if (!dateStr) return false;
+    const d = dateStr.slice(0, 10);
+    return d >= from && d <= to;
+  };
+
+  // Filtered datasets
+  const filteredSales = useMemo(() => (salesQuery.data ?? []).filter(s => !s.returned && inDateRange(s.created_at)), [salesQuery.data, from, to]);
+  const filteredPurchases = useMemo(() => (purchasesQuery.data ?? []).filter(p => inDateRange(p.created_at)), [purchasesQuery.data, from, to]);
+  const filteredExpenses = useMemo(() => (expensesQuery.data ?? []).filter(e => inDateRange(e.created_at)), [expensesQuery.data, from, to]);
+  const filteredCashbox = useMemo(() => (cashboxQuery.data ?? []).filter(c => inDateRange(c.created_at)), [cashboxQuery.data, from, to]);
+  const filteredSomiti = useMemo(() => (somitiQuery.data ?? []).filter(s => inDateRange(s.created_at)), [somitiQuery.data, from, to]);
+  const filteredParties = useMemo(() => (partiesQuery.data ?? []).filter(p => inDateRange(p.created_at)), [partiesQuery.data, from, to]);
+
+  // Totals calculations
+  const salesTotalVal = useMemo(() => filteredSales.reduce((a, s) => a + Number(s.sell_price) * s.qty, 0), [filteredSales]);
+  const salesProfitVal = useMemo(() => filteredSales.reduce((a, s) => a + Number(s.profit), 0), [filteredSales]);
+  const purchaseTotalVal = useMemo(() => filteredPurchases.reduce((a, p) => a + Number(p.total), 0), [filteredPurchases]);
+  const expenseTotalVal = useMemo(() => filteredExpenses.reduce((a, e) => a + Number(e.amount), 0), [filteredExpenses]);
+
+  const somitiNetVal = useMemo(() => {
+    return filteredSomiti.reduce((a, s) => {
+      return s.kind === "deposit" ? a + Number(s.amount) : a - Number(s.amount);
+    }, 0);
+  }, [filteredSomiti]);
+
+  const cashboxNetVal = useMemo(() => {
+    return filteredCashbox.reduce((a, c) => {
+      if (c.kind === "deposit" || c.kind === "sale") return a + Number(c.amount);
+      return a - Number(c.amount);
+    }, 0);
+  }, [filteredCashbox]);
+
+  // Chart Data preparation
+  const chartData = useMemo(() => {
+    const map: Record<string, { date: string; Sales: number; Purchases: number; Expenses: number }> = {};
+    const start = new Date(from);
+    const end = new Date(to);
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const key = d.toISOString().slice(0, 10);
+      map[key] = { date: key, Sales: 0, Purchases: 0, Expenses: 0 };
+    }
+
+    filteredSales.forEach(s => {
+      const key = s.created_at.slice(0, 10);
+      if (map[key]) map[key].Sales += Number(s.sell_price) * s.qty;
+    });
+
+    filteredPurchases.forEach(p => {
+      const key = p.created_at.slice(0, 10);
+      if (map[key]) map[key].Purchases += Number(p.total);
+    });
+
+    filteredExpenses.forEach(e => {
+      const key = e.created_at.slice(0, 10);
+      if (map[key]) map[key].Expenses += Number(e.amount);
+    });
+
+    return Object.values(map)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(item => ({
+        ...item,
+        // Shorten date format for chart XAxis
+        date: item.date.slice(5) // e.g. "06-12"
+      }));
+  }, [filteredSales, filteredPurchases, filteredExpenses, from, to]);
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="space-y-6 pb-12">
+      {/* Printable Header Area (only visible during printing) */}
+      <div className="hidden print:block invoice-print max-w-4xl mx-auto bg-white text-black p-4 font-sans space-y-4 text-xs">
+        <div className="flex justify-between items-center border-b pb-4">
+          <div>
+            <h1 className="text-xl font-bold uppercase">{bizName}</h1>
+            <p className="text-gray-500 text-[10px]">{t("reports")}</p>
+          </div>
+          <div className="text-right">
+            <h2 className="text-sm font-bold">{lang === "bn" ? "ব্যবসা বিশ্লেষণ রিপোর্ট" : "Business Analysis Report"}</h2>
+            <p className="text-gray-500 text-[10px] mt-0.5">
+              {lang === "bn" ? `সময়কাল: ${from} থেকে ${to}` : `Period: ${from} to ${to}`}
+            </p>
+            <p className="text-gray-400 text-[9px]">
+              {lang === "bn" ? `তৈরি হয়েছে: ${new Date().toLocaleString()}` : `Generated: ${new Date().toLocaleString()}`}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Screen Controls Header (hidden during printing) */}
+      <div className="flex items-center justify-between no-print border-b pb-3">
+        <div className="flex items-center gap-2">
+          <Link href="/more">
+            <Button size="icon" variant="ghost" className="size-8">
+              <ArrowLeft className="size-4" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight font-serif">
+              {lang === "bn" ? "রিপোর্ট ও বিশ্লেষণ" : "Reports & Analytics"}
+            </h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {lang === "bn" ? "কাস্টম পিডিএফ রিপোর্ট জেনারেটর" : "Custom PDF Report Generator"}
+            </p>
+          </div>
+        </div>
+
+        <Button onClick={handlePrint} size="sm" className="bg-primary hover:bg-primary/90">
+          <Printer className="size-4 mr-1.5" />
+          {lang === "bn" ? "পিডিএফ প্রিন্ট করুন" : "Print PDF"}
+        </Button>
+      </div>
+
+      {/* Control Panel (no-print) */}
+      <Card className="p-4 no-print space-y-4 bg-card/60 backdrop-blur-sm">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Date range picker */}
+          <div className="space-y-2.5">
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Calendar className="size-3.5" />
+              {lang === "bn" ? "তারিখের সীমা" : "Date Range"}
+            </Label>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <span className="text-[10px] text-muted-foreground">{lang === "bn" ? "হতে" : "From"}</span>
+                <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="h-9 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] text-muted-foreground">{lang === "bn" ? "পর্যন্ত" : "To"}</span>
+                <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="h-9 text-xs" />
+              </div>
+            </div>
+            <div className="flex gap-1.5 pt-1">
+              <Button size="sm" variant="outline" className="text-[10px] h-7" onClick={() => setPreset("today")}>
+                {lang === "bn" ? "আজ" : "Today"}
+              </Button>
+              <Button size="sm" variant="outline" className="text-[10px] h-7" onClick={() => setPreset("week")}>
+                {lang === "bn" ? "৭ দিন" : "7 Days"}
+              </Button>
+              <Button size="sm" variant="outline" className="text-[10px] h-7" onClick={() => setPreset("month")}>
+                {lang === "bn" ? "৩০ দিন" : "30 Days"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Section selections */}
+          <div className="space-y-2.5">
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              {lang === "bn" ? "রিপোর্টে অন্তর্ভুক্ত করুন" : "Include in Report"}
+            </Label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-xs">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={showSales} onChange={e => setShowSales(e.target.checked)} className="rounded text-primary border-muted-foreground/30 size-3.5" />
+                <span>{lang === "bn" ? "বিক্রি" : "Sales"}</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={showPurchases} onChange={e => setShowPurchases(e.target.checked)} className="rounded text-primary border-muted-foreground/30 size-3.5" />
+                <span>{lang === "bn" ? "ক্রয়" : "Purchases"}</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={showExpenses} onChange={e => setShowExpenses(e.target.checked)} className="rounded text-primary border-muted-foreground/30 size-3.5" />
+                <span>{lang === "bn" ? "খরচ / ব্যয়" : "Expenses"}</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={showCashbox} onChange={e => setShowCashbox(e.target.checked)} className="rounded text-primary border-muted-foreground/30 size-3.5" />
+                <span>{lang === "bn" ? "ক্যাশ বক্স" : "Cashbox"}</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={showSomiti} onChange={e => setShowSomiti(e.target.checked)} className="rounded text-primary border-muted-foreground/30 size-3.5" />
+                <span>{lang === "bn" ? "সমিতি" : "Somiti"}</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={showParties} onChange={e => setShowParties(e.target.checked)} className="rounded text-primary border-muted-foreground/30 size-3.5" />
+                <span>{lang === "bn" ? "পার্টিসমূহ" : "Parties"}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Summary Metrics KPI Area */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {showSales && (
+          <Card className="p-3.5 space-y-1 beveled-card bg-emerald-500/5 border-emerald-500/20">
+            <div className="text-[10px] text-muted-foreground uppercase font-semibold flex items-center gap-1.5">
+              <TrendingUp className="size-3 text-emerald-600" />
+              {lang === "bn" ? "মোট বিক্রি" : "Total Sales"}
+            </div>
+            <div className="text-lg font-bold font-serif text-emerald-600">{fmtMoney(salesTotalVal)}</div>
+            <div className="text-[9px] text-muted-foreground">
+              {lang === "bn" ? `${filteredSales.length} টি বিক্রি (লাভ ৳${salesProfitVal})` : `${filteredSales.length} sales (profit ৳${salesProfitVal})`}
+            </div>
+          </Card>
+        )}
+
+        {showPurchases && (
+          <Card className="p-3.5 space-y-1 beveled-card bg-blue-500/5 border-blue-500/20">
+            <div className="text-[10px] text-muted-foreground uppercase font-semibold flex items-center gap-1.5">
+              <ShoppingCart className="size-3 text-blue-600" />
+              {lang === "bn" ? "মোট ক্রয়" : "Total Purchases"}
+            </div>
+            <div className="text-lg font-bold font-serif text-blue-600">{fmtMoney(purchaseTotalVal)}</div>
+            <div className="text-[9px] text-muted-foreground">
+              {lang === "bn" ? `${filteredPurchases.length} টি ক্রয় ভাউচার` : `${filteredPurchases.length} purchase vouchers`}
+            </div>
+          </Card>
+        )}
+
+        {showExpenses && (
+          <Card className="p-3.5 space-y-1 beveled-card bg-rose-500/5 border-rose-500/20">
+            <div className="text-[10px] text-muted-foreground uppercase font-semibold flex items-center gap-1.5">
+              <Receipt className="size-3 text-rose-600" />
+              {lang === "bn" ? "মোট ব্যয়" : "Total Overhead"}
+            </div>
+            <div className="text-lg font-bold font-serif text-rose-600">{fmtMoney(expenseTotalVal)}</div>
+            <div className="text-[9px] text-muted-foreground">
+              {lang === "bn" ? `${filteredExpenses.length} টি অন্যান্য খরচ` : `${filteredExpenses.length} other expenses`}
+            </div>
+          </Card>
+        )}
+
+        {showCashbox && (
+          <Card className="p-3.5 space-y-1 beveled-card bg-amber-500/5 border-amber-500/20">
+            <div className="text-[10px] text-muted-foreground uppercase font-semibold flex items-center gap-1.5">
+              <Banknote className="size-3 text-amber-600" />
+              {lang === "bn" ? "ক্যাশ নিট প্রবাহ" : "Cashbox Net"}
+            </div>
+            <div className={`text-lg font-bold font-serif ${cashboxNetVal >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+              {cashboxNetVal >= 0 ? "+" : ""}{fmtMoney(cashboxNetVal)}
+            </div>
+            <div className="text-[9px] text-muted-foreground">
+              {lang === "bn" ? `${filteredCashbox.length} টি ক্যাশ বিবরণী` : `${filteredCashbox.length} cash box actions`}
+            </div>
+          </Card>
+        )}
+
+        {showSomiti && (
+          <Card className="p-3.5 space-y-1 beveled-card bg-indigo-500/5 border-indigo-500/20 col-span-2 md:col-span-1">
+            <div className="text-[10px] text-muted-foreground uppercase font-semibold flex items-center gap-1.5">
+              <PiggyBank className="size-3 text-indigo-600" />
+              {lang === "bn" ? "সমিতি নিট ব্যালেন্স" : "Somiti Net"}
+            </div>
+            <div className={`text-lg font-bold font-serif ${somitiNetVal >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+              {somitiNetVal >= 0 ? "+" : ""}{fmtMoney(somitiNetVal)}
+            </div>
+            <div className="text-[9px] text-muted-foreground">
+              {lang === "bn" ? `${filteredSomiti.length} টি লেনদেন` : `${filteredSomiti.length} somiti activities`}
+            </div>
+          </Card>
+        )}
+      </div>
+
+      {/* Chart Section (rendered with animation disabled for printing) */}
+      {(showSales || showPurchases || showExpenses) && chartData.length > 0 && (
+        <Card className="p-4 space-y-3 beveled-card bg-card/40 backdrop-blur-sm print:shadow-none print:border-none">
+          <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground print:text-black">
+            {lang === "bn" ? "রাজস্ব বনাম ক্রয় বনাম খরচ বিশ্লেষণ" : "Sales vs Purchases vs Expenses Comparison"}
+          </div>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                <XAxis dataKey="date" tick={{ fontSize: 9 }} />
+                <YAxis tick={{ fontSize: 9 }} />
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 10 }} />
+                {showSales && <Bar dataKey="Sales" fill="#10b981" isAnimationActive={false} radius={[3, 3, 0, 0]} />}
+                {showPurchases && <Bar dataKey="Purchases" fill="#3b82f6" isAnimationActive={false} radius={[3, 3, 0, 0]} />}
+                {showExpenses && <Bar dataKey="Expenses" fill="#ef4444" isAnimationActive={false} radius={[3, 3, 0, 0]} />}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      )}
+
+      {/* Detailed Transaction Tables (Formatted for A4 Invoices/Reports) */}
+      <div className="space-y-6">
+        {/* Sales Table */}
+        {showSales && filteredSales.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold tracking-wide uppercase border-b pb-1 flex items-center gap-1.5 print:text-black">
+              <TrendingUp className="size-4 text-emerald-600 no-print" />
+              {lang === "bn" ? "বিক্রয় বিবরণী" : "Sales Records"}
+            </h3>
+            <div className="overflow-x-auto rounded-lg border bg-background print:border-black print:bg-white print:text-black">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "তারিখ" : "Date"}</th>
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "পণ্যের বিবরণ" : "Product"}</th>
+                    <th className="p-2.5 font-bold text-center">{lang === "bn" ? "পরিমাণ" : "Qty"}</th>
+                    <th className="p-2.5 font-bold text-right">{lang === "bn" ? "বিক্রয় মূল্য" : "Sell"}</th>
+                    <th className="p-2.5 font-bold text-center">{lang === "bn" ? "পেমেন্ট টাইপ" : "Type"}</th>
+                    <th className="p-2.5 font-bold text-right">{lang === "bn" ? "বকেয়া" : "Due"}</th>
+                    <th className="p-2.5 font-bold text-right">{lang === "bn" ? "লাভ" : "Profit"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y print:divide-black">
+                  {filteredSales.map(s => (
+                    <tr key={s.id}>
+                      <td className="p-2.5 whitespace-nowrap">{fmtDateTime(s.created_at)}</td>
+                      <td className="p-2.5 font-medium">{s.product_name}</td>
+                      <td className="p-2.5 text-center">{s.qty}</td>
+                      <td className="p-2.5 text-right font-serif">{fmtMoney(Number(s.sell_price) * s.qty)}</td>
+                      <td className="p-2.5 text-center capitalize">{s.type}</td>
+                      <td className="p-2.5 text-right text-rose-600 font-bold font-serif">{s.due_amount > 0 ? fmtMoney(s.due_amount) : "—"}</td>
+                      <td className="p-2.5 text-right text-emerald-600 font-bold font-serif">{fmtMoney(s.profit)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-muted/30 font-bold print:bg-gray-50 border-t print:border-black">
+                    <td colSpan={2} className="p-2.5">{lang === "bn" ? "মোট" : "Total"}</td>
+                    <td className="p-2.5 text-center">{filteredSales.reduce((a, s) => a + s.qty, 0)}</td>
+                    <td className="p-2.5 text-right font-serif">{fmtMoney(salesTotalVal)}</td>
+                    <td className="p-2.5 text-center">—</td>
+                    <td className="p-2.5 text-right text-rose-600 font-serif">
+                      {fmtMoney(filteredSales.reduce((a, s) => a + Number(s.due_amount), 0))}
+                    </td>
+                    <td className="p-2.5 text-right text-emerald-600 font-serif">{fmtMoney(salesProfitVal)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Purchases Table */}
+        {showPurchases && filteredPurchases.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold tracking-wide uppercase border-b pb-1 flex items-center gap-1.5 print:text-black">
+              <ShoppingCart className="size-4 text-blue-600 no-print" />
+              {lang === "bn" ? "ক্রয় বিবরণী" : "Purchase Records"}
+            </h3>
+            <div className="overflow-x-auto rounded-lg border bg-background print:border-black print:bg-white print:text-black">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "তারিখ" : "Date"}</th>
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "পণ্যের বিবরণ" : "Product"}</th>
+                    <th className="p-2.5 font-bold text-center">{lang === "bn" ? "পরিমাণ" : "Qty"}</th>
+                    <th className="p-2.5 font-bold text-right">{lang === "bn" ? "একক মূল্য" : "Unit Cost"}</th>
+                    <th className="p-2.5 font-bold text-right">{lang === "bn" ? "মোট মূল্য" : "Total"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y print:divide-black">
+                  {filteredPurchases.map(p => (
+                    <tr key={p.id}>
+                      <td className="p-2.5 whitespace-nowrap">{fmtDateTime(p.created_at)}</td>
+                      <td className="p-2.5 font-medium">{p.product_name}</td>
+                      <td className="p-2.5 text-center">{p.qty}</td>
+                      <td className="p-2.5 text-right font-serif">{fmtMoney(p.unit_cost)}</td>
+                      <td className="p-2.5 text-right font-serif font-bold">{fmtMoney(p.total)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-muted/30 font-bold print:bg-gray-50 border-t print:border-black">
+                    <td colSpan={2} className="p-2.5">{lang === "bn" ? "মোট" : "Total"}</td>
+                    <td className="p-2.5 text-center">{filteredPurchases.reduce((a, p) => a + p.qty, 0)}</td>
+                    <td className="p-2.5 text-right">—</td>
+                    <td className="p-2.5 text-right font-serif">{fmtMoney(purchaseTotalVal)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Expenses Table */}
+        {showExpenses && filteredExpenses.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold tracking-wide uppercase border-b pb-1 flex items-center gap-1.5 print:text-black">
+              <Receipt className="size-4 text-rose-600 no-print" />
+              {lang === "bn" ? "খরচ / ব্যয় বিবরণী" : "Expense Records"}
+            </h3>
+            <div className="overflow-x-auto rounded-lg border bg-background print:border-black print:bg-white print:text-black">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "তারিখ" : "Date"}</th>
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "খরচের খাত / বিবরণ" : "Description / Expense Head"}</th>
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "মন্তব্য" : "Remarks"}</th>
+                    <th className="p-2.5 font-bold text-right">{lang === "bn" ? "খরচের পরিমাণ" : "Amount"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y print:divide-black">
+                  {filteredExpenses.map(e => (
+                    <tr key={e.id}>
+                      <td className="p-2.5 whitespace-nowrap">{fmtDateTime(e.created_at)}</td>
+                      <td className="p-2.5 font-medium">{e.title}</td>
+                      <td className="p-2.5 text-muted-foreground">{e.note || "—"}</td>
+                      <td className="p-2.5 text-right font-serif font-bold text-rose-600">{fmtMoney(e.amount)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-muted/30 font-bold print:bg-gray-50 border-t print:border-black">
+                    <td colSpan={3} className="p-2.5">{lang === "bn" ? "মোট খরচ" : "Total Expenses"}</td>
+                    <td className="p-2.5 text-right font-serif text-rose-600">{fmtMoney(expenseTotalVal)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Cashbox Table */}
+        {showCashbox && filteredCashbox.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold tracking-wide uppercase border-b pb-1 flex items-center gap-1.5 print:text-black">
+              <Banknote className="size-4 text-amber-600 no-print" />
+              {lang === "bn" ? "ক্যাশ বক্স লেনদেন বিবরণী" : "Cashbox Action Ledger"}
+            </h3>
+            <div className="overflow-x-auto rounded-lg border bg-background print:border-black print:bg-white print:text-black">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "তারিখ" : "Date"}</th>
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "টাইপ" : "Action type"}</th>
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "মন্তব্য" : "Note / Reference"}</th>
+                    <th className="p-2.5 font-bold text-right">{lang === "bn" ? "পরিমাণ" : "Amount"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y print:divide-black">
+                  {filteredCashbox.map(c => {
+                    const isPlus = c.kind === "deposit" || c.kind === "sale";
+                    return (
+                      <tr key={c.id}>
+                        <td className="p-2.5 whitespace-nowrap">{fmtDateTime(c.created_at)}</td>
+                        <td className="p-2.5 capitalize font-medium">{c.kind}</td>
+                        <td className="p-2.5 text-muted-foreground">{c.note || "—"}</td>
+                        <td className={`p-2.5 text-right font-serif font-bold ${isPlus ? "text-emerald-600" : "text-rose-600"}`}>
+                          {isPlus ? "+" : "−"}{fmtMoney(c.amount)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="bg-muted/30 font-bold print:bg-gray-50 border-t print:border-black">
+                    <td colSpan={3} className="p-2.5">{lang === "bn" ? "নিট ক্যাশ ব্যালেন্স প্রবাহ" : "Net Cashbox Flow"}</td>
+                    <td className={`p-2.5 text-right font-serif ${cashboxNetVal >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                      {cashboxNetVal >= 0 ? "+" : ""}{fmtMoney(cashboxNetVal)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Somiti Table */}
+        {showSomiti && filteredSomiti.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold tracking-wide uppercase border-b pb-1 flex items-center gap-1.5 print:text-black">
+              <PiggyBank className="size-4 text-indigo-600 no-print" />
+              {lang === "bn" ? "সমিতি সঞ্চয় বিবরণী" : "Somiti Deposit & Withdrawals"}
+            </h3>
+            <div className="overflow-x-auto rounded-lg border bg-background print:border-black print:bg-white print:text-black">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "তারিখ" : "Date"}</th>
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "ধরন" : "Action"}</th>
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "মন্তব্য" : "Remarks"}</th>
+                    <th className="p-2.5 font-bold text-right">{lang === "bn" ? "পরিমাণ" : "Amount"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y print:divide-black">
+                  {filteredSomiti.map(s => {
+                    const isPlus = s.kind === "deposit";
+                    return (
+                      <tr key={s.id}>
+                        <td className="p-2.5 whitespace-nowrap">{fmtDateTime(s.created_at)}</td>
+                        <td className="p-2.5 capitalize font-medium">{s.kind}</td>
+                        <td className="p-2.5 text-muted-foreground">{s.note || "—"}</td>
+                        <td className={`p-2.5 text-right font-serif font-bold ${isPlus ? "text-emerald-600" : "text-rose-600"}`}>
+                          {isPlus ? "+" : "−"}{fmtMoney(s.amount)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="bg-muted/30 font-bold print:bg-gray-50 border-t print:border-black">
+                    <td colSpan={3} className="p-2.5">{lang === "bn" ? "সমিতি নিট সঞ্চয়" : "Net Somiti Balance"}</td>
+                    <td className={`p-2.5 text-right font-serif ${somitiNetVal >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                      {somitiNetVal >= 0 ? "+" : ""}{fmtMoney(somitiNetVal)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Parties Table */}
+        {showParties && filteredParties.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold tracking-wide uppercase border-b pb-1 flex items-center gap-1.5 print:text-black">
+              <Users className="size-4 text-amber-600 no-print" />
+              {lang === "bn" ? "সক্রিয় পার্টি ও সরবরাহকারী বিবরণী" : "Parties Registration Logs"}
+            </h3>
+            <div className="overflow-x-auto rounded-lg border bg-background print:border-black print:bg-white print:text-black">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "নিবন্ধন তারিখ" : "Registered Date"}</th>
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "পার্টির নাম" : "Name"}</th>
+                    <th className="p-2.5 font-bold">{lang === "bn" ? "ফোন নম্বর" : "Phone"}</th>
+                    <th className="p-2.5 font-bold text-center">{lang === "bn" ? "আর্কাইভ করা" : "Archived"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y print:divide-black">
+                  {filteredParties.map(p => (
+                    <tr key={p.id}>
+                      <td className="p-2.5 whitespace-nowrap">{fmtDateTime(p.created_at)}</td>
+                      <td className="p-2.5 font-semibold">{p.name}</td>
+                      <td className="p-2.5 font-mono">{p.phone || "—"}</td>
+                      <td className="p-2.5 text-center capitalize">{p.archived ? (lang === "bn" ? "হ্যাঁ" : "Yes") : (lang === "bn" ? "না" : "No")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

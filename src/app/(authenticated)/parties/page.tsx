@@ -20,6 +20,12 @@ import type { Party } from "@/lib/queries";
 import Link from "next/link";
 import { downloadCsv, exportDateStamp } from "@/lib/export";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function PartiesPage() {
   const { lang, t } = useT();
@@ -108,18 +114,20 @@ export default function PartiesPage() {
     }
   }
 
-  function exportParties() {
-    const headers = ["ID", "Name", "Phone", "Owed to Me", "I Owe", "Archived"];
+  function exportParties(langCode: "en" | "bn") {
+    const headers = langCode === "bn"
+      ? ["নাম", "ফোন নম্বর", "মোট বকেয়া", "আর্কাইভ করা"]
+      : ["Name", "Phone", "Total Payable (I Owe)", "Archived"];
     const rows = filtered.map(p => [
-      p.id,
       p.name,
       p.phone || "",
-      getPartyReceivable(p.id),
       getPartyPayable(p.id),
-      p.archived ? "Yes" : "No"
+      p.archived
+        ? (langCode === "bn" ? "হ্যাঁ" : "Yes")
+        : (langCode === "bn" ? "না" : "No")
     ]);
     downloadCsv(`parties_${activeTab}_${exportDateStamp()}.csv`, headers, rows);
-    toast.success(t("download_csv"));
+    toast.success(langCode === "bn" ? "CSV ফাইল ডাউনলোড সফল হয়েছে!" : "CSV exported successfully!");
   }
 
   return (
@@ -130,10 +138,22 @@ export default function PartiesPage() {
           <p className="text-xs text-muted-foreground mt-0.5">{filtered.length} {t("parties")}</p>
         </div>
         <div className="flex gap-1.5 items-center">
-          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={exportParties}>
-            <Download className="size-4 mr-1" />
-            {t("download_csv")}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" className="h-8 text-xs">
+                <Download className="size-4 mr-1" />
+                {t("download_csv")}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => exportParties("en")}>
+                English (ইংরেজি)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportParties("bn")}>
+                Bangla (বাংলা)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" onClick={() => setAddOpen(true)}>
             <UserPlus className="size-4 mr-1" />
             {t("add_party")}

@@ -181,8 +181,10 @@ export default function ProductsPage() {
     }
   }
 
-  function exportProducts() {
-    const headers = ["ID", "Name", "Buy Price", "Sell Price", "Stock", "Min Stock Alert", "Attributes", "Archived"];
+  function exportProducts(langCode: "en" | "bn") {
+    const headers = langCode === "bn"
+      ? ["আইডি", "নাম", "ক্রয় মূল্য", "বিক্রয় মূল্য", "স্টক", "সর্বনিম্ন স্টক সতর্কবার্তা", "বৈশিষ্ট্য", "আর্কাইভ করা"]
+      : ["ID", "Name", "Buy Price", "Sell Price", "Stock", "Min Stock Alert", "Attributes", "Archived"];
     const rows = filteredProducts.map(p => [
       p.id,
       p.name,
@@ -191,10 +193,12 @@ export default function ProductsPage() {
       p.stock,
       p.min_stock ?? 5,
       JSON.stringify(p.attributes || {}),
-      p.archived ? "Yes" : "No"
+      p.archived
+        ? (langCode === "bn" ? "হ্যাঁ" : "Yes")
+        : (langCode === "bn" ? "না" : "No")
     ]);
     downloadCsv(`products_${activeTab}_${exportDateStamp()}.csv`, headers, rows);
-    toast.success(t("download_csv"));
+    toast.success(langCode === "bn" ? "CSV ফাইল ডাউনলোড সফল হয়েছে!" : "CSV exported successfully!");
   }
 
   return (
@@ -250,10 +254,22 @@ export default function ProductsPage() {
               </span>
             )}
           </Button>
-          <Button size="sm" variant="outline" className="h-8 text-[10px] sm:text-xs" onClick={exportProducts}>
-            <Download className="size-3.5 mr-1" />
-            {isMobile ? "" : t("download_csv")}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" className="h-8 text-[10px] sm:text-xs">
+                <Download className="size-3.5 mr-1" />
+                {isMobile ? "" : t("download_csv")}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => exportProducts("en")}>
+                English (ইংরেজি)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportProducts("bn")}>
+                Bangla (বাংলা)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" variant="outline" className="h-8 text-[10px] sm:text-xs" onClick={() => setBuyOpen(true)}>{t("buy")}</Button>
         </div>
       </div>

@@ -16,6 +16,12 @@ import { PaginationBar, paginate } from "@/components/ui/pagination-bar";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { deleteSaleFn, deletePurchaseFn, deleteExpenseFn, deleteReturnFn } from "@/lib/rpc";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type Range = "today" | "week" | "month" | "all";
 
@@ -183,20 +189,23 @@ export default function TrackbackPage() {
 
   const { items: pagedSales, totalPages, safePage } = paginate(filteredSales, page, pageSize);
 
-  function exportSalesCsv() {
-    downloadCsv(
-      `sales-${exportDateStamp()}.csv`,
-      ["Date", "Product", "Qty", "Type", "Total", "Profit", "Due"],
-      filteredSales.map(s => [
-        fmtDateTime(s.created_at),
-        s.product_name,
-        s.qty,
-        s.type,
-        Number(s.sell_price) * s.qty,
-        s.profit,
-        s.due_amount,
-      ]),
-    );
+  function exportSalesCsv(langCode: "en" | "bn") {
+    const headers = langCode === "bn"
+      ? ["তারিখ", "পণ্য", "পরিমাণ", "ধরণ", "মোট মূল্য", "লাভ", "বকেয়া"]
+      : ["Date", "Product", "Qty", "Type", "Total", "Profit", "Due"];
+    const rows = filteredSales.map(s => [
+      fmtDateTime(s.created_at),
+      s.product_name,
+      s.qty,
+      langCode === "bn"
+        ? (s.type === "cash" ? "নগদ" : s.type === "credit" ? "বাকী" : "অনলাইন")
+        : s.type,
+      Number(s.sell_price) * s.qty,
+      s.profit,
+      s.due_amount,
+    ]);
+    downloadCsv(`sales-${exportDateStamp()}.csv`, headers, rows);
+    toast.success(langCode === "bn" ? "CSV ফাইল ডাউনলোড সফল হয়েছে!" : "CSV exported successfully!");
   }
 
   return (
@@ -206,10 +215,22 @@ export default function TrackbackPage() {
           <h1 className="text-xl font-bold font-serif">{t("trackback")}</h1>
           <p className="text-xs text-muted-foreground mt-0.5">{t("reports")} · {t("all_records")}</p>
         </div>
-        <Button size="sm" variant="outline" className="h-8 text-xs shrink-0" onClick={exportSalesCsv}>
-          <Download className="size-3.5 mr-1" />
-          {t("download_csv")}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline" className="h-8 text-xs shrink-0">
+              <Download className="size-3.5 mr-1" />
+              {t("download_csv")}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => exportSalesCsv("en")}>
+              English (ইংরেজি)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => exportSalesCsv("bn")}>
+              Bangla (বাংলা)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Date filters */}

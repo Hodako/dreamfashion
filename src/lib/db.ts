@@ -1,4 +1,10 @@
-import type { Db, MongoClient } from "mongodb";
+import type { Db, MongoClient, Collection, Document as MongoDocument } from "mongodb";
+
+export type CustomDb = Omit<Db, "collection"> & {
+  collection<TSchema extends MongoDocument = MongoDocument>(
+    name: string
+  ): Collection<Omit<TSchema, "_id"> & { _id: string }>;
+};
 
 // Lazy singleton — never throws at module load time.
 // process.env is read inside the function so it works with Nitro/Vite SSR.
@@ -62,9 +68,9 @@ async function ensureIndexes(db: Db) {
   }
 }
 
-export async function getDb(): Promise<Db> {
+export async function getDb(): Promise<CustomDb> {
   const client = await getClient();
   const db = client.db();
   ensureIndexes(db);
-  return db;
+  return db as unknown as CustomDb;
 }

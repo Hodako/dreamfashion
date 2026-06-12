@@ -14,6 +14,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Download, BarChart3 } from "lucide-react";
 import { fmtDateTime } from "@/lib/format";
+import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function inRange(iso: string, from: string, to: string) {
   const d = iso.slice(0, 10);
@@ -49,25 +56,37 @@ export function ReportsPanel() {
   const salesProfit = filteredSales.reduce((a, s) => a + Number(s.profit), 0);
   const purchaseTotal = filteredPurchases.reduce((a, p) => a + Number(p.total), 0);
 
-  function exportSales() {
+  function exportSales(langCode: "en" | "bn") {
+    const headers = langCode === "bn"
+      ? ["তারিখ", "পণ্য", "পরিমাণ", "বিক্রয় মূল্য", "লাভ", "ধরণ", "বকেয়া"]
+      : ["Date", "Product", "Qty", "Sell", "Profit", "Type", "Due"];
     downloadCsv(
       `sales-${exportDateStamp()}.csv`,
-      ["Date", "Product", "Qty", "Sell", "Profit", "Type", "Due"],
+      headers,
       filteredSales.map(s => [
         fmtDateTime(s.created_at), s.product_name, s.qty,
-        Number(s.sell_price) * s.qty, s.profit, s.type, s.due_amount,
+        Number(s.sell_price) * s.qty, s.profit,
+        langCode === "bn"
+          ? (s.type === "cash" ? "নগদ" : s.type === "credit" ? "বাকী" : "অনলাইন")
+          : s.type.toUpperCase(),
+        s.due_amount,
       ]),
     );
+    toast.success(langCode === "bn" ? "CSV ফাইল ডাউনলোড সফল হয়েছে!" : "CSV exported successfully!");
   }
 
-  function exportPurchases() {
+  function exportPurchases(langCode: "en" | "bn") {
+    const headers = langCode === "bn"
+      ? ["তারিখ", "পণ্য", "পরিমাণ", "ইউনিট খরচ", "মোট"]
+      : ["Date", "Product", "Qty", "Unit cost", "Total"];
     downloadCsv(
       `purchases-${exportDateStamp()}.csv`,
-      ["Date", "Product", "Qty", "Unit cost", "Total"],
+      headers,
       filteredPurchases.map(p => [
         fmtDateTime(p.created_at), p.product_name, p.qty, p.unit_cost, p.total,
       ]),
     );
+    toast.success(langCode === "bn" ? "CSV ফাইল ডাউনলোড সফল হয়েছে!" : "CSV exported successfully!");
   }
 
   if (!canView) return null;
@@ -105,12 +124,37 @@ export function ReportsPanel() {
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={exportSales}>
-          <Download className="size-3 mr-1" />{t("export_sales_csv")}
-        </Button>
-        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={exportPurchases}>
-          <Download className="size-3 mr-1" />{t("export_buys_csv")}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline" className="h-8 text-xs w-full">
+              <Download className="size-3 mr-1" />{t("export_sales_csv")}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center">
+            <DropdownMenuItem onClick={() => exportSales("en")}>
+              English (ইংরেজি)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => exportSales("bn")}>
+              Bangla (বাংলা)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline" className="h-8 text-xs w-full">
+              <Download className="size-3 mr-1" />{t("export_buys_csv")}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center">
+            <DropdownMenuItem onClick={() => exportPurchases("en")}>
+              English (ইংরেজি)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => exportPurchases("bn")}>
+              Bangla (বাংলা)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </Card>
   );

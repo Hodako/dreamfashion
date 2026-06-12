@@ -45,22 +45,26 @@ export default function SomitiPage() {
     }
   }
 
-  function exportCSV() {
-    const rows = [["Date", "Type", "Amount", "Note"]];
+  function exportCSV(langCode: "en" | "bn") {
+    const rows = langCode === "bn"
+      ? [["তারিখ", "ধরণ", "পরিমাণ", "মন্তব্য"]]
+      : [["Date", "Type", "Amount", "Note"]];
     (data ?? []).forEach(e => {
       rows.push([
-        new Date(e.created_at).toLocaleString(),
-        e.kind === "deposit" ? t("deposit") : t("withdraw"),
+        new Date(e.created_at).toLocaleString(langCode === "bn" ? "bn-BD" : "en-US"),
+        e.kind === "deposit"
+          ? (langCode === "bn" ? "জমা" : "Deposit")
+          : (langCode === "bn" ? "উত্তোলন" : "Withdrawal"),
         String(e.amount),
         e.note ?? "",
       ]);
     });
     const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.href = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" }));
     a.download = `somiti-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
-    toast.success("CSV Exported");
+    toast.success(langCode === "bn" ? "CSV ফাইল ডাউনলোড সফল হয়েছে!" : "CSV exported successfully!");
   }
 
   return (
@@ -68,10 +72,22 @@ export default function SomitiPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t("somiti")}</h1>
         {data && data.length > 0 && (
-          <Button variant="outline" size="sm" onClick={exportCSV}>
-            <Download className="size-4 mr-1.5" />
-            {t("export_csv") || "Export CSV"}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Download className="size-4 mr-1.5" />
+                {t("export_csv") || "Export CSV"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => exportCSV("en")}>
+                English (ইংরেজি)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportCSV("bn")}>
+                Bangla (বাংলা)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
       <Card className="p-4 bg-gradient-to-br from-primary/10 to-success/10">

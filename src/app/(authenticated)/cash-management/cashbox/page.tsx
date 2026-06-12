@@ -20,6 +20,12 @@ import { ArrowLeft, Plus, Minus, Download, Banknote, TrendingUp, TrendingDown } 
 import { createCashboxFn } from "@/lib/rpc";
 import { toast } from "sonner";
 import { setCachedData, refreshQueries } from "@/lib/optimistic-cache";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 
 
@@ -98,28 +104,49 @@ export default function CashboxDetailsPage() {
 
   useEffect(() => { setPage(1); }, [range, startDate, endDate, filterKind]);
 
-  function exportCSV() {
-    const rows = [["Date", "Time", "Type", "Note", "Amount", "Direction"]];
+  function exportCSV(langCode: "en" | "bn") {
+    const rows = langCode === "bn"
+      ? [["তারিখ", "সময়", "ধরণ", "মন্তব্য", "পরিমাণ", "দিকনির্দেশ"]]
+      : [["Date", "Time", "Type", "Note", "Amount", "Direction"]];
     filtered.forEach(e => {
       const d = new Date(e.created_at);
+      let typeLabel = e.kind;
+      if (langCode === "bn") {
+        if (e.kind === "deposit") typeLabel = "জমা";
+        else if (e.kind === "withdraw") typeLabel = "উত্তোলন";
+        else if (e.kind === "sale") typeLabel = "বিক্রয়";
+        else if (e.kind === "expense") typeLabel = "খরচ";
+      } else {
+        typeLabel = e.kind.toUpperCase();
+      }
+
       rows.push([
-        d.toLocaleDateString(),
-        d.toLocaleTimeString(),
-        e.kind,
+        d.toLocaleDateString(langCode === "bn" ? "bn-BD" : "en-US"),
+        d.toLocaleTimeString(langCode === "bn" ? "bn-BD" : "en-US"),
+        typeLabel,
         e.note ?? "",
         String(e.amount),
-        cashboxDelta(e.kind, e.amount) >= 0 ? "in" : "out",
+        cashboxDelta(e.kind, e.amount) >= 0 
+          ? (langCode === "bn" ? "ভিতরে (ইন)" : "in")
+          : (langCode === "bn" ? "বাহিরে (আউট)" : "out"),
       ]);
     });
     rows.push([]);
-    rows.push(["Summary", "", "", "Balance", String(balance), ""]);
-    rows.push(["Period In", "", "", "", String(periodIn), ""]);
-    rows.push(["Period Out", "", "", "", String(periodOut), ""]);
+    if (langCode === "bn") {
+      rows.push(["সারসংক্ষেপ", "", "", "ব্যালেন্স", String(balance), ""]);
+      rows.push(["নির্বাচিত সময়ে মোট জমা", "", "", "", String(periodIn), ""]);
+      rows.push(["নির্বাচিত সময়ে মোট উত্তোলন", "", "", "", String(periodOut), ""]);
+    } else {
+      rows.push(["Summary", "", "", "Balance", String(balance), ""]);
+      rows.push(["Period In", "", "", "", String(periodIn), ""]);
+      rows.push(["Period Out", "", "", "", String(periodOut), ""]);
+    }
     const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.href = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" }));
     a.download = `cashbox-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
+    toast.success(langCode === "bn" ? "CSV ফাইল ডাউনলোড সফল হয়েছে!" : "CSV exported successfully!");
   }
 
   const rangeLabel =
@@ -218,9 +245,21 @@ export default function CashboxDetailsPage() {
       </div>
 
       <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={exportCSV} disabled={filtered.length === 0}>
-          <Download className="size-4 mr-1" />{t("export_csv")}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" disabled={filtered.length === 0}>
+              <Download className="size-4 mr-1" />{t("export_csv")}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => exportCSV("en")}>
+              English (ইংরেজি)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => exportCSV("bn")}>
+              Bangla (বাংলা)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <Card className="divide-y divide-border overflow-hidden">
