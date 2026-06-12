@@ -87,16 +87,16 @@ function groupAllDataByDay(sales: any[], expenses: any[], days: number) {
 
 // ── stat card ─────────────────────────────────────────────────────────────
 function KPICard({
-  label, value, sub, icon: Icon, imageUrl, trend, trendUp, color, onClick,
+  label, value, sub, icon: Icon, imageUrl, trend, trendUp, color, onClick, className,
 }: {
   label: string; value: string; sub?: string;
   icon?: React.ElementType; imageUrl?: string; trend?: string; trendUp?: boolean; color: string;
-  onClick?: () => void;
+  onClick?: () => void; className?: string;
 }) {
   return (
     <Card
       onClick={onClick}
-      className={`p-4 flex flex-col gap-2 hover:shadow-md transition-all ${
+      className={`p-4 flex flex-col gap-2 hover:shadow-md transition-all ${className || ""} ${
         onClick
           ? "cursor-pointer hover:border-primary/45 active:scale-[0.97] active:bg-accent/40 shadow-sm hover:shadow-md active:shadow-inner"
           : ""
@@ -669,35 +669,7 @@ export default function Dashboard() {
             {!collapsed.kpis && (
               <div className="space-y-2.5">
                 <div className="grid grid-cols-2 gap-2">
-                  <Link href="/profits" className="block">
-                    <KPICard
-                      label={t("profit")}
-                      value={fmtMoney(profitToday)}
-                      sub={t("today")}
-                      imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
-                      color="bg-emerald-500"
-                    />
-                  </Link>
-                  <Link href="/losses" className="block">
-                    <KPICard
-                      label={lang === "bn" ? "লোকসান" : "Loss"}
-                      value={fmtMoney(lossToday)}
-                      sub={t("today")}
-                      imageUrl="https://img.icons8.com/clouds/100/loss.png"
-                      color="bg-rose-500"
-                    />
-                  </Link>
-                  <KPICard
-                    label={t("cash_sale")}
-                    value={fmtMoney(cashToday)}
-                    sub={t("today")}
-                    imageUrl="https://img.icons8.com/fluency/48/sell.png"
-                    color="bg-indigo-500"
-                    onClick={() => {
-                      setSalePresetType("cash");
-                      setSaleOpen(true);
-                    }}
-                  />
+                  {/* Row 1: Credit Sale (Col 1), Cash Sale (Col 2) */}
                   <KPICard
                     label={t("credit_sale")}
                     value={fmtMoney(creditToday)}
@@ -709,16 +681,96 @@ export default function Dashboard() {
                       setSaleOpen(true);
                     }}
                   />
-                  {canAccess(perms, "expenses") && (
-                    <Link href="/expenses" className="block">
-                      <KPICard label={t("expense")} value={fmtMoney(expenseToday)} sub={t("today")} imageUrl="https://img.icons8.com/color/48/tax.png" color="bg-rose-500" />
-                    </Link>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-2 border-t border-border/50 pt-2.5">
+                  <KPICard
+                    label={t("cash_sale")}
+                    value={fmtMoney(cashToday)}
+                    sub={t("today")}
+                    imageUrl="https://img.icons8.com/fluency/48/sell.png"
+                    color="bg-indigo-500"
+                    onClick={() => {
+                      setSalePresetType("cash");
+                      setSaleOpen(true);
+                    }}
+                  />
+
+                  {/* Row 2: Online Sell (Col 1), Spanning 2 Columns */}
+                  <KPICard
+                    label={t("online_sell")}
+                    value={fmtMoney(onlineToday)}
+                    sub={t("today")}
+                    imageUrl="https://img.icons8.com/fluency/48/sell.png"
+                    color="bg-sky-500"
+                    onClick={() => {
+                      setSalePresetType("online");
+                      setSaleOpen(true);
+                    }}
+                    className="col-span-2"
+                  />
+
+                  {/* Row 3: Profit (Col 1), Loss (Col 2) */}
+                  <Link href="/profits" className="block">
+                    <KPICard
+                      label={t("profit")}
+                      value={fmtMoney(profitToday)}
+                      sub={t("today")}
+                      imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
+                      color="bg-emerald-500"
+                      className="h-full"
+                    />
+                  </Link>
+                  <Link href="/losses" className="block">
+                    <KPICard
+                      label={lang === "bn" ? "লোকসান" : "Loss"}
+                      value={fmtMoney(lossToday)}
+                      sub={t("today")}
+                      imageUrl="https://img.icons8.com/clouds/100/loss.png"
+                      color="bg-rose-500"
+                      className="h-full"
+                    />
+                  </Link>
+
+                  {/* Row 4: Expenses (Col 1), Total Dues (Col 2) */}
                   {canAccess(perms, "expenses") ? (
-                    <Link href="/cash-management/cashbox" className="block">
-                      <KPICard label={t("cashbox")} value={fmtMoney(cashboxTotal)} imageUrl="https://img.icons8.com/plasticine/100/cash--v1.png" color="bg-indigo-600" trendUp={cashboxTotal >= 0} trend={t("balance")} />
+                    <Link href="/expenses" className="block">
+                      <KPICard
+                        label={t("expense")}
+                        value={fmtMoney(expenseToday)}
+                        sub={t("today")}
+                        imageUrl="https://img.icons8.com/color/48/tax.png"
+                        color="bg-rose-500"
+                        className="h-full"
+                      />
+                    </Link>
+                  ) : (
+                    <div />
+                  )}
+                  {canAccess(perms, "parties") ? (
+                    <Link href="/dues" className="block">
+                      <KPICard
+                        label={t("due")}
+                        value={fmtMoney(totalDues)}
+                        imageUrl="https://img.icons8.com/color/48/loan.png"
+                        color="bg-amber-600"
+                        trendUp={false}
+                        className="h-full"
+                      />
+                    </Link>
+                  ) : (
+                    <div />
+                  )}
+
+                  {/* Row 5: Cashbox (col-span-2, double row height) */}
+                  {canAccess(perms, "expenses") ? (
+                    <Link href="/cash-management/cashbox" className="col-span-2 block h-36">
+                      <KPICard
+                        label={t("cashbox")}
+                        value={fmtMoney(cashboxTotal)}
+                        imageUrl="https://img.icons8.com/plasticine/100/cash--v1.png"
+                        color="bg-indigo-600"
+                        trendUp={cashboxTotal >= 0}
+                        trend={t("balance")}
+                        className="h-full justify-between"
+                      />
                     </Link>
                   ) : (
                     <KPICard
@@ -731,12 +783,8 @@ export default function Dashboard() {
                         setSalePresetType("cash");
                         setSaleOpen(true);
                       }}
+                      className="col-span-2"
                     />
-                  )}
-                  {canAccess(perms, "parties") && (
-                    <Link href="/dues" className="block">
-                      <KPICard label={t("due")} value={fmtMoney(totalDues)} imageUrl="https://img.icons8.com/color/48/loan.png" color="bg-amber-600" trendUp={false} />
-                    </Link>
                   )}
                 </div>
               </div>
