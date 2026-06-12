@@ -6,7 +6,7 @@ import {
   ShoppingCart, Receipt, PiggyBank, DollarSign,
   Banknote, BarChart3, Settings, FileText,
   LogOut, TrendingUp, TrendingDown, GripVertical, Palette,
-  Layout, Type, Image as ImageIcon, Sparkles
+  Layout, Type, Image as ImageIcon, Sparkles, LayoutGrid, AlignLeft, AlignCenter, AlignRight
 } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { useAuth } from "@/hooks/use-auth";
@@ -55,6 +55,50 @@ export default function MorePage() {
     isMaterialUI: false,
   });
 
+  // KPI config state
+  const [kpiConfig, setKpiConfig] = useState({
+    align: "left",
+    size: "standard",
+    columns: 2,
+    order: ["credit_sale", "cash_sale", "online_sell", "profit", "loss", "expense", "due", "cashbox"]
+  });
+  const [kpiDraggedIndex, setKpiDraggedIndex] = useState<number | null>(null);
+
+  const kpiLabels: Record<string, string> = {
+    credit_sale: lang === "bn" ? "বাকি বিক্রয়" : "Credit Sale",
+    cash_sale: lang === "bn" ? "নগদ বিক্রয়" : "Cash Sale",
+    online_sell: lang === "bn" ? "অনলাইন বিক্রয়" : "Online Sale",
+    profit: lang === "bn" ? "মোট মুনাফা" : "Total Profit",
+    loss: lang === "bn" ? "মোট ক্ষতি" : "Total Loss",
+    expense: lang === "bn" ? "মোট খরচ" : "Total Expenses",
+    due: lang === "bn" ? "মোট বাকি" : "Total Due",
+    cashbox: lang === "bn" ? "ক্যাশবক্স" : "Cashbox",
+  };
+
+  const updateKpiConfig = (patch: Partial<typeof kpiConfig>) => {
+    const next = { ...kpiConfig, ...patch };
+    setKpiConfig(next);
+    localStorage.setItem("hz_kpi_config", JSON.stringify(next));
+    window.dispatchEvent(new Event("hz-kpi-config-updated"));
+  };
+
+  const handleKpiDragStart = (idx: number) => setKpiDraggedIndex(idx);
+  const handleKpiDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    if (kpiDraggedIndex === null || kpiDraggedIndex === idx) return;
+    const list = [...kpiConfig.order];
+    const item = list[kpiDraggedIndex];
+    list.splice(kpiDraggedIndex, 1);
+    list.splice(idx, 0, item);
+    setKpiDraggedIndex(idx);
+    setKpiConfig(prev => ({ ...prev, order: list }));
+  };
+  const handleKpiDragEnd = () => {
+    setKpiDraggedIndex(null);
+    localStorage.setItem("hz_kpi_config", JSON.stringify(kpiConfig));
+    window.dispatchEvent(new Event("hz-kpi-config-updated"));
+  };
+
   // Widget ordering state
   const [widgets, setWidgets] = useState<any[]>([]);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -65,6 +109,16 @@ export default function MorePage() {
     if (savedTheme) {
       try {
         setTheme(prev => ({ ...prev, ...JSON.parse(savedTheme) }));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // Load KPI config
+    const savedKpi = localStorage.getItem("hz_kpi_config");
+    if (savedKpi) {
+      try {
+        setKpiConfig(prev => ({ ...prev, ...JSON.parse(savedKpi) }));
       } catch (e) {
         console.error(e);
       }
@@ -337,10 +391,19 @@ export default function MorePage() {
                   className="w-full h-8 rounded border border-border bg-background px-2 text-xs"
                 >
                   <option value="">{lang === "bn" ? "ডিফল্ট ফন্ট" : "Default Font"}</option>
+                  <option value="Roboto, sans-serif">Roboto (Google — Clean)</option>
+                  <option value="Montserrat, sans-serif">Montserrat (Google — Bold)</option>
+                  <option value="Nunito, sans-serif">Nunito (Google — Rounded)</option>
+                  <option value="Ubuntu, sans-serif">Ubuntu (Google — Friendly)</option>
+                  <option value="'Playfair Display', serif">Playfair Display (Elegant Serif)</option>
                   <option value="Poppins, 'Hind Siliguri', sans-serif">Poppins & Hind Siliguri (Modern)</option>
-                  <option value="Lora, serif">Lora (Classic Serif)</option>
+                  <option value="Lora, Georgia, serif">Lora (Classic Serif)</option>
+                  <option value="'Times New Roman', Times, serif">Times New Roman (Traditional Serif)</option>
                   <option value="'Fira Code', monospace">Fira Code (Developer Mono)</option>
-                  <option value="system-ui, sans-serif">System UI (Native)</option>
+                  <option value="system-ui, -apple-system, sans-serif">System UI (Native OS)</option>
+                  <option value="sans-serif">Sans-Serif (Browser Default)</option>
+                  <option value="Arial, Helvetica, sans-serif">Arial / Helvetica (Classic)</option>
+                  <option value="Georgia, 'Times New Roman', serif">Georgia (Elegant Serif)</option>
                 </select>
               </div>
 
@@ -461,7 +524,101 @@ export default function MorePage() {
             </div>
           </div>
 
-          {/* Section D: Background Image */}
+          {/* Section D: KPI Card Customization */}
+          <div className="space-y-3 pt-3 border-t border-border/50">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+              <LayoutGrid className="size-4 text-muted-foreground" />
+              <span>{lang === "bn" ? "KPI কার্ড কাস্টমাইজেশন" : "KPI Card Customization"}</span>
+            </div>
+
+            {/* KPI Alignment */}
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">{lang === "bn" ? "কার্ড টেক্সট অ্যালাইনমেন্ট" : "Card Text Alignment"}</Label>
+              <div className="flex gap-2">
+                {(["left", "center", "right"] as const).map(a => (
+                  <button
+                    key={a}
+                    onClick={() => updateKpiConfig({ align: a })}
+                    className={`flex-1 h-8 rounded-lg border text-[11px] font-medium flex items-center justify-center gap-1 transition-all ${
+                      kpiConfig.align === a
+                        ? "border-primary bg-primary/10 text-primary shadow-sm"
+                        : "border-border bg-background text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    {a === "left" && <AlignLeft className="size-3.5" />}
+                    {a === "center" && <AlignCenter className="size-3.5" />}
+                    {a === "right" && <AlignRight className="size-3.5" />}
+                    {lang === "bn" ? (a === "left" ? "বাম" : a === "center" ? "মাঝ" : "ডান") : (a === "left" ? "Left" : a === "center" ? "Center" : "Right")}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* KPI Card Size */}
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">{lang === "bn" ? "কার্ড সাইজ" : "Card Size"}</Label>
+              <div className="flex bg-muted rounded-lg p-0.5 text-xs w-full">
+                {(["small", "standard", "large"] as const).map(s => (
+                  <button
+                    key={s}
+                    onClick={() => updateKpiConfig({ size: s })}
+                    className={`flex-1 py-1.5 rounded-md text-center font-medium transition-all capitalize ${
+                      kpiConfig.size === s
+                        ? "bg-background text-foreground shadow font-semibold"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {lang === "bn" ? (s === "small" ? "ছোট" : s === "standard" ? "স্ট্যান্ডার্ড" : "বড়") : s.charAt(0).toUpperCase() + s.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* KPI Columns */}
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">{lang === "bn" ? "কলাম সংখ্যা (মোবাইল)" : "Columns per Row (Mobile)"}</Label>
+              <div className="flex bg-muted rounded-lg p-0.5 text-xs">
+                {[1, 2, 3].map(c => (
+                  <button
+                    key={c}
+                    onClick={() => updateKpiConfig({ columns: c })}
+                    className={`flex-1 py-1.5 rounded-md text-center font-medium transition-all ${
+                      kpiConfig.columns === c
+                        ? "bg-background text-foreground shadow font-semibold"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {c} {lang === "bn" ? "কলাম" : "Col"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* KPI Drag-and-Drop Order */}
+            <div className="space-y-1.5">
+              <Label className="text-[10px] text-muted-foreground">{lang === "bn" ? "KPI ক্রম (ড্র্যাগ করে পরিবর্তন করুন)" : "KPI Order (Drag to reorder)"}</Label>
+              <div className="space-y-1">
+                {kpiConfig.order.map((id, idx) => (
+                  <div
+                    key={id}
+                    draggable
+                    onDragStart={() => handleKpiDragStart(idx)}
+                    onDragOver={(e) => handleKpiDragOver(e, idx)}
+                    onDragEnd={handleKpiDragEnd}
+                    className={`p-2 bg-background border border-border/75 rounded-lg flex items-center gap-2 cursor-grab active:cursor-grabbing transition-all select-none hover:bg-muted/20 ${
+                      kpiDraggedIndex === idx ? "opacity-40 scale-[0.98] border-primary" : ""
+                    }`}
+                  >
+                    <GripVertical className="size-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-[11px] font-semibold text-foreground flex-1">{kpiLabels[id] || id}</span>
+                    <span className="text-[9px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">{idx + 1}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Section E: Background Image */}
           <div className="space-y-3 pt-3 border-t border-border/50">
             <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
               <ImageIcon className="size-4 text-muted-foreground" />
@@ -521,7 +678,7 @@ export default function MorePage() {
             </div>
           </div>
 
-          {/* Section E: Dashboard Widget Drag-and-Drop */}
+          {/* Section G: Dashboard Widget Drag-and-Drop */}
           <div className="space-y-3 pt-3 border-t border-border/50">
             <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
               <Sparkles className="size-4 text-muted-foreground" />

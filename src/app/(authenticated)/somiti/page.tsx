@@ -397,8 +397,11 @@ export default function SomitiPage() {
           if (!val) setSamityToRename(null);
         }}
         oldName={samityToRename}
-        onRenameSuccess={() => {
+        onRenameSuccess={(newName) => {
           qc.invalidateQueries({ queryKey: ["somiti"] });
+          if (selectedSamity && selectedSamity === samityToRename) {
+            setSelectedSamity(newName);
+          }
         }}
       />
     </div>
@@ -571,7 +574,7 @@ function RenameDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   oldName: string | null;
-  onRenameSuccess: () => void;
+  onRenameSuccess: (newName: string) => void;
 }) {
   const { t, lang } = useT();
   const [newName, setNewName] = useState("");
@@ -597,7 +600,7 @@ function RenameDialog({
         },
       });
       toast.success(lang === "bn" ? "সফলভাবে নাম পরিবর্তন করা হয়েছে" : "Renamed successfully");
-      onRenameSuccess();
+      onRenameSuccess(newName.trim());
       onOpenChange(false);
     } catch (err: any) {
       toast.error(err.message || "Failed to rename");

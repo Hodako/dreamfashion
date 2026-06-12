@@ -188,6 +188,14 @@ export function CustomThemeManager() {
         body {
           color: ${config.textColor} !important;
         }
+        /* Custom text color overrides hardcoded classes */
+        .text-black, 
+        .text-zinc-950, .text-zinc-900, .text-zinc-800, .text-zinc-700,
+        .text-slate-950, .text-slate-900, .text-slate-800, .text-slate-700,
+        .text-neutral-950, .text-neutral-900, .text-neutral-800, .text-neutral-700,
+        .text-gray-950, .text-gray-900, .text-gray-800, .text-gray-700 {
+          color: ${config.textColor} !important;
+        }
       `;
     }
 

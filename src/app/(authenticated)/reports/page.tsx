@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  Calendar, Printer, ArrowLeft, FileText,
+  Calendar, Printer, ArrowLeft, FileText, Download,
   TrendingUp, ShoppingCart, Receipt, PiggyBank,
   Banknote, Users, CheckSquare, Square, RefreshCw
 } from "lucide-react";
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/lib/i18n";
+import { toast } from "sonner";
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import {
   getSales, getPurchases, getExpenses,
@@ -153,6 +154,65 @@ export default function ReportsGeneratorPage() {
     }, 1500);
   };
 
+  const handleDownloadPDF = () => {
+    playTapSound();
+    setIsGeneratingPDF(true);
+
+    const runHtml2Pdf = () => {
+      const element = document.getElementById("print-report-content");
+      if (!element) {
+        setIsGeneratingPDF(false);
+        return;
+      }
+
+      // Temporarily show the element for rendering
+      element.classList.remove("hidden");
+      element.classList.remove("print:block");
+      element.style.display = "block";
+
+      const opt = {
+        margin:       0.4,
+        filename:     `report-${from}-to-${to}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
+
+      // @ts-ignore
+      window.html2pdf().set(opt).from(element).save().then(() => {
+        element.classList.add("hidden");
+        element.classList.add("print:block");
+        element.style.display = "";
+        setIsGeneratingPDF(false);
+        toast.success(lang === "bn" ? "পিডিএফ ডাউনলোড শুরু হয়েছে!" : "PDF download started!");
+      }).catch((err: any) => {
+        console.error("PDF download error", err);
+        element.classList.add("hidden");
+        element.classList.add("print:block");
+        element.style.display = "";
+        setIsGeneratingPDF(false);
+        toast.error(lang === "bn" ? "পিডিএফ তৈরি করতে ব্যর্থ হয়েছে" : "Failed to generate PDF");
+      });
+    };
+
+    // Load html2pdf script dynamically from CDN
+    // @ts-ignore
+    if (window.html2pdf) {
+      runHtml2Pdf();
+    } else {
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+      script.onload = () => {
+        runHtml2Pdf();
+      };
+      script.onerror = () => {
+        setIsGeneratingPDF(false);
+        toast.error(lang === "bn" ? "লাইব্রেরি লোড করতে ব্যর্থ হয়েছে" : "Failed to load PDF library");
+      };
+      document.body.appendChild(script);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-12">
       {isGeneratingPDF && (
@@ -190,10 +250,16 @@ export default function ReportsGeneratorPage() {
             </div>
           </div>
 
-          <Button onClick={handlePrint} size="sm" className="bg-primary hover:bg-primary/90">
-            <Printer className="size-4 mr-1.5" />
-            {lang === "bn" ? "পিডিএফ প্রিন্ট করুন" : "Print PDF"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={handlePrint} size="sm" className="bg-primary hover:bg-primary/90">
+              <Printer className="size-4 mr-1.5" />
+              {lang === "bn" ? "প্রিন্ট করুন" : "Print PDF"}
+            </Button>
+            <Button onClick={handleDownloadPDF} size="sm" variant="outline" className="border-primary/40 text-primary hover:bg-primary/5">
+              <Download className="size-4 mr-1.5" />
+              {lang === "bn" ? "ডাউনলোড করুন" : "Download PDF"}
+            </Button>
+          </div>
         </div>
 
         {/* Control Panel (no-print) */}
@@ -605,7 +671,7 @@ export default function ReportsGeneratorPage() {
       </div>
 
       {/* DEDICATED PRINT VIEW (visible only when printing) */}
-      <div className="hidden print:block print-color-exact w-full max-w-4xl mx-auto bg-white text-zinc-900 p-8 font-sans space-y-8 text-xs">
+      <div id="print-report-content" className="hidden print:block print-color-exact w-full max-w-4xl mx-auto bg-white text-zinc-900 p-8 font-sans space-y-8 text-xs">
         {/* PAGE 1: Overview & Graph Cover */}
         <div className="space-y-8">
           {/* Header */}

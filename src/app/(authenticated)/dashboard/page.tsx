@@ -88,23 +88,45 @@ function groupAllDataByDay(sales: any[], expenses: any[], days: number) {
 
 // ── stat card ─────────────────────────────────────────────────────────────
 function KPICard({
-  label, value, sub, icon: Icon, imageUrl, trend, trendUp, color, onClick, className, imageClassName,
+  label, value, sub, icon: Icon, imageUrl, trend, trendUp, color, onClick, className, imageClassName, align = "left", size = "standard",
 }: {
   label: string; value: string; sub?: string;
   icon?: React.ElementType; imageUrl?: string; trend?: string; trendUp?: boolean; color: string;
   onClick?: () => void; className?: string; imageClassName?: string;
+  align?: "left" | "center" | "right";
+  size?: "small" | "standard" | "large";
 }) {
+  const alignClass = align === "center" ? "text-center items-center" : align === "right" ? "text-right items-end" : "text-left items-start";
+  
+  // Padding & Text Size depending on size setting
+  let sizePadding = "p-4 gap-2";
+  let labelSize = "text-xs";
+  let valSize = "text-xl";
+  let subSize = "text-[10px]";
+  
+  if (size === "small") {
+    sizePadding = "p-2.5 gap-1";
+    labelSize = "text-[10px]";
+    valSize = "text-base";
+    subSize = "text-[9px]";
+  } else if (size === "large") {
+    sizePadding = "p-5 gap-3";
+    labelSize = "text-sm";
+    valSize = "text-2xl";
+    subSize = "text-xs";
+  }
+
   return (
     <Card
       onClick={onClick}
-      className={`p-4 flex flex-col gap-2 hover:shadow-md transition-all ${className || ""} ${
+      className={`flex flex-col hover:shadow-md transition-all ${sizePadding} ${alignClass} ${className || ""} ${
         onClick
           ? "cursor-pointer hover:border-primary/45 active:scale-[0.97] active:bg-accent/40 shadow-sm hover:shadow-md active:shadow-inner"
           : ""
       }`}
     >
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <div className={`flex items-center justify-between w-full ${align === "right" ? "flex-row-reverse" : ""}`}>
+        <span className={`${labelSize} font-medium text-muted-foreground`}>{label}</span>
         {imageUrl ? (
           <div className="size-8 flex items-center justify-center shrink-0">
             <img src={imageUrl} className={`size-8 object-contain ${imageClassName || ""}`} alt={label} />
@@ -115,12 +137,12 @@ function KPICard({
           </div>
         ) : null}
       </div>
-      <div>
-        <div className="text-xl font-bold tracking-tight">{value}</div>
-        {sub && <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>}
+      <div className={`flex flex-col ${align === "center" ? "items-center" : align === "right" ? "items-end" : "items-start"}`}>
+        <div className={`${valSize} font-bold tracking-tight`}>{value}</div>
+        {sub && <div className={`${subSize} text-muted-foreground mt-0.5`}>{sub}</div>}
       </div>
       {trend && (
-        <div className={`flex items-center gap-1 text-[10px] font-medium ${trendUp ? "text-emerald-600" : "text-red-500"}`}>
+        <div className={`flex items-center gap-1 ${subSize} font-medium ${trendUp ? "text-emerald-600" : "text-red-500"}`}>
           {trendUp ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
           {trend}
         </div>
@@ -208,6 +230,37 @@ export default function Dashboard() {
 
   // Best Selling Limit state
   const [bestSellingLimit, setBestSellingLimit] = useState(5);
+
+  // KPI Configuration state
+  const [kpiConfig, setKpiConfig] = useState({
+    align: "left",
+    size: "standard",
+    columns: 2,
+    order: ["credit_sale", "cash_sale", "online_sell", "profit", "loss", "expense", "due", "cashbox"]
+  });
+
+  useEffect(() => {
+    const saved = localStorage.getItem("hz_kpi_config");
+    if (saved) {
+      try {
+        setKpiConfig(prev => ({ ...prev, ...JSON.parse(saved) }));
+      } catch (e) {
+        console.error("Failed to parse kpi config", e);
+      }
+    }
+    const handleUpdate = () => {
+      const savedNew = localStorage.getItem("hz_kpi_config");
+      if (savedNew) {
+        try {
+          setKpiConfig(prev => ({ ...prev, ...JSON.parse(savedNew) }));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    };
+    window.addEventListener("hz-kpi-config-updated", handleUpdate);
+    return () => window.removeEventListener("hz-kpi-config-updated", handleUpdate);
+  }, []);
 
   // Collapsible sections on mobile
   const [collapsed, setCollapsed] = useState({
@@ -662,136 +715,149 @@ export default function Dashboard() {
   const renderWidget = (widgetId: string) => {
     switch (widgetId) {
       case "kpis":
+        // Define all cards dynamically in a map
+        const kpiCardsMap: Record<string, React.ReactNode> = {
+          credit_sale: (
+            <KPICard
+              key="credit_sale"
+              label={t("credit_sale")}
+              value={fmtMoney(creditToday)}
+              sub={t("today")}
+              imageUrl="https://img.icons8.com/fluency/48/sell.png"
+              color="bg-amber-500"
+              onClick={() => {
+                playTapSound();
+                setSalePresetType("credit");
+                setSaleOpen(true);
+              }}
+              align={kpiConfig.align as any}
+              size={kpiConfig.size as any}
+            />
+          ),
+          cash_sale: (
+            <KPICard
+              key="cash_sale"
+              label={t("cash_sale")}
+              value={fmtMoney(cashToday)}
+              sub={t("today")}
+              imageUrl="https://img.icons8.com/fluency/48/sell.png"
+              color="bg-indigo-500"
+              onClick={() => {
+                playTapSound();
+                setSalePresetType("cash");
+                setSaleOpen(true);
+              }}
+              align={kpiConfig.align as any}
+              size={kpiConfig.size as any}
+            />
+          ),
+          online_sell: (
+            <KPICard
+              key="online_sell"
+              label={t("online_sell")}
+              value={fmtMoney(onlineToday)}
+              sub={t("today")}
+              imageUrl="https://img.icons8.com/fluency/48/sell.png"
+              color="bg-sky-500"
+              onClick={() => {
+                playTapSound();
+                setSalePresetType("online");
+                setSaleOpen(true);
+              }}
+              className={kpiConfig.columns > 1 ? "col-span-2" : ""}
+              align={kpiConfig.align as any}
+              size={kpiConfig.size as any}
+            />
+          ),
+          profit: (
+            <Link href="/profits" className="block" key="profit" onClick={() => playTapSound()}>
+              <KPICard
+                label={t("profit")}
+                value={fmtMoney(profitToday)}
+                sub={t("today")}
+                imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
+                color="bg-emerald-500"
+                className="h-full w-full"
+                align={kpiConfig.align as any}
+                size={kpiConfig.size as any}
+              />
+            </Link>
+          ),
+          loss: (
+            <Link href="/losses" className="block" key="loss" onClick={() => playTapSound()}>
+              <KPICard
+                label={lang === "bn" ? "লোকসান" : "Loss"}
+                value={fmtMoney(lossToday)}
+                sub={t("today")}
+                imageUrl="https://img.icons8.com/external-flaticons-lineal-color-flat-icons/64/external-loss-casino-flaticons-lineal-color-flat-icons.png"
+                color="bg-rose-500"
+                className="h-full w-full"
+                imageClassName="dark:invert"
+                align={kpiConfig.align as any}
+                size={kpiConfig.size as any}
+              />
+            </Link>
+          ),
+          expense: canAccess(perms, "expenses") ? (
+            <Link href="/expenses" className="block" key="expense" onClick={() => playTapSound()}>
+              <KPICard
+                label={t("expense")}
+                value={fmtMoney(expenseToday)}
+                sub={t("today")}
+                imageUrl="https://img.icons8.com/color/48/tax.png"
+                color="bg-rose-500"
+                className="h-full w-full"
+                align={kpiConfig.align as any}
+                size={kpiConfig.size as any}
+              />
+            </Link>
+          ) : <div key="expense" className="hidden" />,
+          due: canAccess(perms, "parties") ? (
+            <Link href="/dues" className="block" key="due" onClick={() => playTapSound()}>
+              <KPICard
+                label={t("due")}
+                value={fmtMoney(totalDues)}
+                imageUrl="https://img.icons8.com/color/48/loan.png"
+                color="bg-amber-600"
+                trendUp={false}
+                className="h-full w-full"
+                align={kpiConfig.align as any}
+                size={kpiConfig.size as any}
+              />
+            </Link>
+          ) : <div key="due" className="hidden" />,
+          cashbox: canAccess(perms, "expenses") ? (
+            <Link href="/cash-management/cashbox" className={`block ${kpiConfig.columns > 1 ? "col-span-2 h-36" : "h-full"}`} key="cashbox" onClick={() => playTapSound()}>
+              <KPICard
+                label={t("cashbox")}
+                value={fmtMoney(cashboxTotal)}
+                imageUrl="https://img.icons8.com/plasticine/100/cash--v1.png"
+                color="bg-indigo-600"
+                trendUp={cashboxTotal >= 0}
+                trend={t("balance")}
+                className="h-full w-full justify-between"
+                align={kpiConfig.align as any}
+                size={kpiConfig.size as any}
+              />
+            </Link>
+          ) : <div key="cashbox" className="hidden" />,
+        };
+
+        const gridColsClass = kpiConfig.columns === 1 ? "grid-cols-1" : kpiConfig.columns === 3 ? "grid-cols-3" : "grid-cols-2";
+
         return (
           <Card key="kpis" className="p-3 border border-border space-y-3 bg-card/65 backdrop-blur-sm beveled-card">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("key_metrics")}</span>
-              <Button variant="ghost" size="icon" className="size-7" onClick={() => setCollapsed(prev => ({ ...prev, kpis: !prev.kpis }))}>
+              <Button variant="ghost" size="icon" className="size-7" onClick={() => { playTapSound(); setCollapsed(prev => ({ ...prev, kpis: !prev.kpis })); }}>
                 {collapsed.kpis ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
               </Button>
             </div>
 
             {!collapsed.kpis && (
               <div className="space-y-2.5">
-                <div className="grid grid-cols-2 gap-2">
-                  {/* Row 1: Credit Sale (Col 1), Cash Sale (Col 2) */}
-                  <KPICard
-                    label={t("credit_sale")}
-                    value={fmtMoney(creditToday)}
-                    sub={t("today")}
-                    imageUrl="https://img.icons8.com/fluency/48/sell.png"
-                    color="bg-amber-500"
-                    onClick={() => {
-                      setSalePresetType("credit");
-                      setSaleOpen(true);
-                    }}
-                  />
-                  <KPICard
-                    label={t("cash_sale")}
-                    value={fmtMoney(cashToday)}
-                    sub={t("today")}
-                    imageUrl="https://img.icons8.com/fluency/48/sell.png"
-                    color="bg-indigo-500"
-                    onClick={() => {
-                      setSalePresetType("cash");
-                      setSaleOpen(true);
-                    }}
-                  />
-
-                  {/* Row 2: Online Sell (Col 1), Spanning 2 Columns */}
-                  <KPICard
-                    label={t("online_sell")}
-                    value={fmtMoney(onlineToday)}
-                    sub={t("today")}
-                    imageUrl="https://img.icons8.com/fluency/48/sell.png"
-                    color="bg-sky-500"
-                    onClick={() => {
-                      setSalePresetType("online");
-                      setSaleOpen(true);
-                    }}
-                    className="col-span-2"
-                  />
-
-                  {/* Row 3: Profit (Col 1), Loss (Col 2) */}
-                  <Link href="/profits" className="block">
-                    <KPICard
-                      label={t("profit")}
-                      value={fmtMoney(profitToday)}
-                      sub={t("today")}
-                      imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
-                      color="bg-emerald-500"
-                      className="h-full"
-                    />
-                  </Link>
-                  <Link href="/losses" className="block">
-                    <KPICard
-                      label={lang === "bn" ? "লোকসান" : "Loss"}
-                      value={fmtMoney(lossToday)}
-                      sub={t("today")}
-                      imageUrl="https://img.icons8.com/external-flaticons-lineal-color-flat-icons/64/external-loss-casino-flaticons-lineal-color-flat-icons.png"
-                      color="bg-rose-500"
-                      className="h-full"
-                      imageClassName="dark:invert"
-                    />
-                  </Link>
-
-                  {/* Row 4: Expenses (Col 1), Total Dues (Col 2) */}
-                  {canAccess(perms, "expenses") ? (
-                    <Link href="/expenses" className="block">
-                      <KPICard
-                        label={t("expense")}
-                        value={fmtMoney(expenseToday)}
-                        sub={t("today")}
-                        imageUrl="https://img.icons8.com/color/48/tax.png"
-                        color="bg-rose-500"
-                        className="h-full"
-                      />
-                    </Link>
-                  ) : (
-                    <div />
-                  )}
-                  {canAccess(perms, "parties") ? (
-                    <Link href="/dues" className="block">
-                      <KPICard
-                        label={t("due")}
-                        value={fmtMoney(totalDues)}
-                        imageUrl="https://img.icons8.com/color/48/loan.png"
-                        color="bg-amber-600"
-                        trendUp={false}
-                        className="h-full"
-                      />
-                    </Link>
-                  ) : (
-                    <div />
-                  )}
-
-                  {/* Row 5: Cashbox (col-span-2, double row height) */}
-                  {canAccess(perms, "expenses") ? (
-                    <Link href="/cash-management/cashbox" className="col-span-2 block h-36">
-                      <KPICard
-                        label={t("cashbox")}
-                        value={fmtMoney(cashboxTotal)}
-                        imageUrl="https://img.icons8.com/plasticine/100/cash--v1.png"
-                        color="bg-indigo-600"
-                        trendUp={cashboxTotal >= 0}
-                        trend={t("balance")}
-                        className="h-full justify-between"
-                      />
-                    </Link>
-                  ) : (
-                    <KPICard
-                      label={t("cash_sale")}
-                      value={fmtMoney(cashToday)}
-                      sub={t("today")}
-                      imageUrl="https://img.icons8.com/fluency/48/sell.png"
-                      color="bg-indigo-600"
-                      onClick={() => {
-                        setSalePresetType("cash");
-                        setSaleOpen(true);
-                      }}
-                      className="col-span-2"
-                    />
-                  )}
+                <div className={`grid gap-2 ${gridColsClass}`}>
+                  {kpiConfig.order.map(key => kpiCardsMap[key])}
                 </div>
               </div>
             )}
@@ -1015,99 +1081,157 @@ export default function Dashboard() {
   const renderDesktopWidget = (widgetId: string) => {
     switch (widgetId) {
       case "kpis":
+        const desktopKpiCardsMap: Record<string, React.ReactNode> = {
+          credit_sale: (
+            <KPICard
+              key="credit_sale"
+              label={t("credit_sale")}
+              value={fmtMoney(creditToday)}
+              sub={t("today")}
+              imageUrl="https://img.icons8.com/fluency/48/sell.png"
+              color="bg-amber-500"
+              onClick={() => {
+                playTapSound();
+                setSalePresetType("credit");
+                setSaleOpen(true);
+              }}
+              align={kpiConfig.align as any}
+              size={kpiConfig.size as any}
+            />
+          ),
+          cash_sale: (
+            <KPICard
+              key="cash_sale"
+              label={t("cash_sale")}
+              value={fmtMoney(cashToday)}
+              sub={t("today")}
+              imageUrl="https://img.icons8.com/fluency/48/sell.png"
+              color="bg-indigo-500"
+              onClick={() => {
+                playTapSound();
+                setSalePresetType("cash");
+                setSaleOpen(true);
+              }}
+              align={kpiConfig.align as any}
+              size={kpiConfig.size as any}
+            />
+          ),
+          online_sell: (
+            <KPICard
+              key="online_sell"
+              label={t("online_sell")}
+              value={fmtMoney(onlineToday)}
+              sub={t("today")}
+              imageUrl="https://img.icons8.com/fluency/48/sell.png"
+              color="bg-sky-500"
+              onClick={() => {
+                playTapSound();
+                setSalePresetType("online");
+                setSaleOpen(true);
+              }}
+              align={kpiConfig.align as any}
+              size={kpiConfig.size as any}
+            />
+          ),
+          profit: (
+            <Link href="/profits" className="block" key="profit" onClick={() => playTapSound()}>
+              <KPICard
+                label={t("profit")}
+                value={fmtMoney(profitToday)}
+                sub={t("today")}
+                imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
+                color="bg-emerald-500"
+                className="h-full"
+                align={kpiConfig.align as any}
+                size={kpiConfig.size as any}
+              />
+            </Link>
+          ),
+          loss: (
+            <Link href="/losses" className="block" key="loss" onClick={() => playTapSound()}>
+              <KPICard
+                label={lang === "bn" ? "লোকসান" : "Loss"}
+                value={fmtMoney(lossToday)}
+                sub={t("today")}
+                imageUrl="https://img.icons8.com/external-flaticons-lineal-color-flat-icons/64/external-loss-casino-flaticons-lineal-color-flat-icons.png"
+                color="bg-rose-500"
+                className="h-full"
+                imageClassName="dark:invert"
+                align={kpiConfig.align as any}
+                size={kpiConfig.size as any}
+              />
+            </Link>
+          ),
+          expense: canAccess(perms, "expenses") ? (
+            <Link href="/expenses" className="block" key="expense" onClick={() => playTapSound()}>
+              <KPICard
+                label={t("expense")}
+                value={fmtMoney(expenseToday)}
+                sub={t("today")}
+                imageUrl="https://img.icons8.com/color/48/tax.png"
+                color="bg-orange-500"
+                className="h-full"
+                align={kpiConfig.align as any}
+                size={kpiConfig.size as any}
+              />
+            </Link>
+          ) : <div key="expense" className="hidden" />,
+          due: canAccess(perms, "parties") ? (
+            <Link href="/dues" className="block" key="due" onClick={() => playTapSound()}>
+              <KPICard
+                label={t("due")}
+                value={fmtMoney(totalDues)}
+                imageUrl="https://img.icons8.com/color/48/loan.png"
+                color="bg-amber-600"
+                trendUp={false}
+                className="h-full"
+                align={kpiConfig.align as any}
+                size={kpiConfig.size as any}
+              />
+            </Link>
+          ) : <div key="due" className="hidden" />,
+          cashbox: canAccess(perms, "expenses") ? (
+            <Link href="/cash-management/cashbox" className="block" key="cashbox" onClick={() => playTapSound()}>
+              <KPICard
+                label={t("cashbox")}
+                value={fmtMoney(cashboxTotal)}
+                imageUrl="https://img.icons8.com/plasticine/100/cash--v1.png"
+                color="bg-indigo-600"
+                trendUp={cashboxTotal >= 0}
+                trend={t("balance")}
+                className="h-full justify-between"
+                align={kpiConfig.align as any}
+                size={kpiConfig.size as any}
+              />
+            </Link>
+          ) : <div key="cashbox" className="hidden" />,
+        };
+
         return (
           <div key="kpis" className="space-y-6 col-span-3">
-            <div className="grid grid-cols-6 gap-4">
-              <Link href="/profits" className="block">
-                <KPICard
-                  label={t("profit")}
-                  value={fmtMoney(profitToday)}
-                  sub={t("today")}
-                  imageUrl="https://img.icons8.com/clouds/100/economic-improvement--v2.png"
-                  color="bg-emerald-500"
-                  trendUp
-                />
-              </Link>
-              <Link href="/losses" className="block">
-                <KPICard
-                  label={lang === "bn" ? "লোকসান" : "Loss"}
-                  value={fmtMoney(lossToday)}
-                  sub={t("today")}
-                  imageUrl="https://img.icons8.com/external-flaticons-lineal-color-flat-icons/64/external-loss-casino-flaticons-lineal-color-flat-icons.png"
-                  color="bg-rose-500"
-                  trendUp={false}
-                  imageClassName="dark:invert"
-                />
-              </Link>
-              {canAccess(perms, "expenses") ? (
-                <Link href="/cash-management/cashbox" className="block">
-                  <KPICard label={t("cashbox")} value={fmtMoney(cashboxTotal)} imageUrl="https://img.icons8.com/plasticine/100/cash--v1.png" color="bg-indigo-500" trendUp={cashboxTotal >= 0} trend={t("balance")} />
-                </Link>
-              ) : (
-                <KPICard
-                  label={t("cash_sale")}
-                  value={fmtMoney(cashToday)}
-                  sub={t("today")}
-                  imageUrl="https://img.icons8.com/fluency/48/sell.png"
-                  color="bg-indigo-500"
-                  trendUp
-                  onClick={() => {
-                    setSalePresetType("cash");
-                    setSaleOpen(true);
-                  }}
-                />
-              )}
-              <KPICard
-                label={t("cash_sale")}
-                value={fmtMoney(cashToday)}
-                sub={t("today")}
-                imageUrl="https://img.icons8.com/fluency/48/sell.png"
-                color="bg-indigo-600"
-                trendUp
-                onClick={() => {
-                  setSalePresetType("cash");
-                  setSaleOpen(true);
-                }}
-              />
-              <KPICard
-                label={t("online_sell")}
-                value={fmtMoney(onlineToday)}
-                sub={t("today")}
-                imageUrl="https://img.icons8.com/fluency/48/sell.png"
-                color="bg-sky-500"
-                trendUp
-                onClick={() => {
-                  setSalePresetType("online");
-                  setSaleOpen(true);
-                }}
-              />
-              {canAccess(perms, "parties") && (
-                <Link href="/dues" className="block">
-                  <KPICard label={t("due")} value={fmtMoney(totalDues)} imageUrl="https://img.icons8.com/color/48/loan.png" color="bg-amber-500" trendUp={false} trend="Outstanding" />
-                </Link>
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              {kpiConfig.order.map(key => desktopKpiCardsMap[key])}
             </div>
 
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <KPICard
-                label={t("credit_sale")}
-                value={fmtMoney(creditToday)}
-                sub={t("today")}
-                imageUrl="https://img.icons8.com/fluency/48/sell.png"
-                color="bg-rose-500"
-                trendUp={false}
-                onClick={() => {
-                  setSalePresetType("credit");
-                  setSaleOpen(true);
-                }}
+                label={t("inventory_val_cost")}
+                value={fmtMoney(totalStockCostValuation)}
+                sub={lang === "bn" ? "কেনা মূল্যের হিসাব" : "Cost Worth of Stock"}
+                imageUrl="https://img.icons8.com/bubbles/100/buy.png"
+                color="bg-teal-500"
+                align={kpiConfig.align as any}
+                size={kpiConfig.size as any}
               />
-              {canAccess(perms, "expenses") && (
-                <Link href="/expenses" className="block">
-                  <KPICard label={t("expense")} value={fmtMoney(expenseToday)} sub={t("today")} imageUrl="https://img.icons8.com/color/48/tax.png" color="bg-orange-500" trendUp={false} />
-                </Link>
-              )}
-              <KPICard label={t("inventory_val_cost")} value={fmtMoney(totalStockCostValuation)} sub={lang === "bn" ? "কেনা মূল্যের হিসাব" : "Cost Worth of Stock"} imageUrl="https://img.icons8.com/bubbles/100/buy.png" color="bg-teal-500" />
-              <KPICard label={t("inventory_val_sale")} value={fmtMoney(totalStockSaleValuation)} sub={lang === "bn" ? "বিক্রি মূল্যের হিসাব" : "Selling Worth of Stock"} icon={Package} color="bg-pink-500" />
+              <KPICard
+                label={t("inventory_val_sale")}
+                value={fmtMoney(totalStockSaleValuation)}
+                sub={lang === "bn" ? "বিক্রি মূল্যের হিসাব" : "Selling Worth of Stock"}
+                icon={Package}
+                color="bg-pink-500"
+                align={kpiConfig.align as any}
+                size={kpiConfig.size as any}
+              />
             </div>
           </div>
         );

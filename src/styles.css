@@ -123,8 +123,73 @@
   --sidebar-ring: oklch(0.65 0.14 155);
 
   /* Ensure any hardcoded dark text classes render light in dark mode */
-  .text-black, .text-zinc-950, .text-slate-950, .text-neutral-950, .text-gray-950 {
-    color: oklch(0.95 0.02 155) !important;
+  .text-black, 
+  .text-zinc-950, .text-zinc-900, .text-zinc-800, .text-zinc-700,
+  .text-slate-950, .text-slate-900, .text-slate-800, .text-slate-700,
+  .text-neutral-950, .text-neutral-900, .text-neutral-800, .text-neutral-700,
+  .text-gray-950, .text-gray-900, .text-gray-800, .text-gray-700,
+  .text-slate-600, .text-zinc-600, .text-gray-600, .text-neutral-600 {
+    color: oklch(0.92 0.02 155) !important;
+  }
+
+  .text-zinc-500, .text-slate-500, .text-gray-500, .text-neutral-500 {
+    color: oklch(0.72 0.03 155) !important;
+  }
+
+  /* Fix muted foreground in dark */
+  .text-muted-foreground {
+    color: oklch(0.70 0.04 155) !important;
+  }
+
+  /* Fix white/light backgrounds in dark mode */
+  .bg-white {
+    background-color: oklch(0.22 0.05 155 / 0.75) !important;
+  }
+  .bg-gray-50, .bg-zinc-50, .bg-slate-50, .bg-neutral-50 {
+    background-color: oklch(0.20 0.04 155) !important;
+  }
+  .bg-gray-100, .bg-zinc-100, .bg-slate-100, .bg-neutral-100 {
+    background-color: oklch(0.23 0.05 155) !important;
+  }
+  .bg-gray-200, .bg-zinc-200, .bg-slate-200 {
+    background-color: oklch(0.26 0.05 155) !important;
+  }
+
+  /* Fix borders in dark */
+  .border-gray-200, .border-zinc-200, .border-slate-200, .border-neutral-200 {
+    border-color: oklch(0.35 0.06 155 / 0.4) !important;
+  }
+  .border-gray-300, .border-zinc-300 {
+    border-color: oklch(0.40 0.06 155 / 0.5) !important;
+  }
+
+  /* Fix native select/input backgrounds */
+  select, input[type="text"], input[type="number"], input[type="email"],
+  input[type="password"], input[type="search"], textarea {
+    background-color: oklch(0.22 0.05 155) !important;
+    color: oklch(0.92 0.02 155) !important;
+    border-color: oklch(0.40 0.06 155 / 0.5) !important;
+  }
+  select option {
+    background-color: oklch(0.20 0.04 155);
+    color: oklch(0.92 0.02 155);
+  }
+
+  /* Fix badge/chip backgrounds */
+  .bg-emerald-500\/10, [class*="bg-emerald-500/10"] {
+    background-color: oklch(0.45 0.12 155 / 0.2) !important;
+  }
+  .bg-amber-500\/10, [class*="bg-amber-500/10"] {
+    background-color: oklch(0.65 0.14 85 / 0.2) !important;
+  }
+  .bg-rose-500\/10, [class*="bg-rose-500/10"] {
+    background-color: oklch(0.60 0.18 25 / 0.2) !important;
+  }
+
+  /* Ensure popover/dropdown is dark */
+  [data-radix-popper-content-wrapper], [role="listbox"] {
+    background-color: oklch(0.22 0.05 155) !important;
+    border-color: oklch(0.35 0.06 155 / 0.5) !important;
   }
 }
 
@@ -139,6 +204,12 @@
     background-image:
       radial-gradient(ellipse 80% 50% at 50% -20%, oklch(0.65 0.14 155 / 0.15), transparent),
       radial-gradient(ellipse 60% 40% at 100% 100%, oklch(0.45 0.12 155 / 0.08), transparent);
+  }
+
+  .dark body {
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, oklch(0.45 0.12 155 / 0.12), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 100%, oklch(0.30 0.08 155 / 0.10), transparent);
   }
 
   html[lang="bn"] body {

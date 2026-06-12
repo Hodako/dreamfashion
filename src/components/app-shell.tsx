@@ -35,7 +35,7 @@ import { PermissionGuard } from "@/components/permission-guard";
 
 type NavItem = {
   to: string;
-  labelKey: "home" | "products" | "sales" | "parties" | "settings" | "more" | "online_sell" | "cash_management" | "trackback" | "expenses" | "somiti" | "new_purchase" | "invoice_generator" | "due" | "profit" | "products_buy" | "losses";
+  labelKey: "home" | "products" | "sales" | "parties" | "settings" | "more" | "online_sell" | "cash_management" | "trackback" | "expenses" | "somiti" | "new_purchase" | "invoice_generator" | "due" | "profit" | "products_buy" | "losses" | "reports_generator";
   icon: React.ElementType;
   perm?: keyof PermissionSet;
 };
@@ -67,6 +67,7 @@ const desktopNavGroups: NavGroup[] = [
   {
     labelKey: "reports",
     items: [
+      { to: "/reports", labelKey: "reports_generator", icon: FileText, perm: "reports" },
       { to: "/profits", labelKey: "profit", icon: TrendingUp, perm: "reports" },
       { to: "/losses", labelKey: "losses", icon: TrendingDown, perm: "reports" },
       { to: "/trackback", labelKey: "trackback", icon: BarChart3, perm: "reports" },
