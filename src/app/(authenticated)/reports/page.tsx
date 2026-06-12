@@ -233,7 +233,7 @@ export default function ReportsGeneratorPage() {
       {/* SCREEN VIEW (hidden when printing) */}
       <div className="print:hidden space-y-6">
         {/* Screen Controls Header (hidden during printing) */}
-        <div className="flex items-center justify-between no-print border-b pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3 no-print border-b pb-3">
           <div className="flex items-center gap-2">
             <Link href="/more">
               <Button size="icon" variant="ghost" className="size-8">
@@ -250,7 +250,8 @@ export default function ReportsGeneratorPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Desktop action buttons — hidden on mobile (mobile uses sticky bottom bar) */}
+          <div className="hidden sm:flex items-center gap-2">
             <Button onClick={handlePrint} size="sm" className="bg-primary hover:bg-primary/90">
               <Printer className="size-4 mr-1.5" />
               {lang === "bn" ? "প্রিন্ট করুন" : "Print PDF"}
@@ -667,6 +668,29 @@ export default function ReportsGeneratorPage() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* ── Mobile sticky action bar (only on small screens) ── */}
+        <div className="sm:hidden fixed bottom-16 left-0 right-0 z-40 print:hidden">
+          <div className="mx-4 flex gap-2 bg-background/95 backdrop-blur-md border border-border rounded-2xl shadow-lg p-2.5">
+            <Button
+              onClick={handlePrint}
+              size="sm"
+              className="flex-1 bg-primary hover:bg-primary/90 text-xs h-10"
+            >
+              <Printer className="size-4 mr-1.5" />
+              {lang === "bn" ? "প্রিন্ট করুন" : "Print PDF"}
+            </Button>
+            <Button
+              onClick={handleDownloadPDF}
+              size="sm"
+              variant="outline"
+              className="flex-1 border-primary/40 text-primary hover:bg-primary/5 text-xs h-10"
+            >
+              <Download className="size-4 mr-1.5" />
+              {lang === "bn" ? "ডাউনলোড" : "Download"}
+            </Button>
+          </div>
         </div>
       </div>
 

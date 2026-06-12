@@ -398,7 +398,8 @@ export default function Dashboard() {
   }, 0);
 
   const expenseToday = filteredExpenses.filter(e => new Date(e.created_at) >= today).reduce((a, e) => a + Number(e.amount), 0);
-  const cashboxTotal = cashboxBalance(filteredCashbox);
+  // Cashbox balance is a running total across ALL time — old credits persist until spent
+  const cashboxTotal = cashboxBalance(allCashbox);
 
   // Stock Valuation
   const totalStockCostValuation = (products.data ?? []).filter(p => !p.archived).reduce((sum, p) => sum + (p.buy_price * p.stock), 0);
