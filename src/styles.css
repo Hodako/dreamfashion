@@ -121,6 +121,11 @@
   --sidebar-accent-foreground: oklch(0.92 0.03 155);
   --sidebar-border: oklch(0.65 0.14 155 / 0.15);
   --sidebar-ring: oklch(0.65 0.14 155);
+
+  /* Ensure any hardcoded dark text classes render light in dark mode */
+  .text-black, .text-zinc-950, .text-slate-950, .text-neutral-950, .text-gray-950 {
+    color: oklch(0.95 0.02 155) !important;
+  }
 }
 
 @layer base {

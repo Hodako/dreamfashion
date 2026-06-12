@@ -87,11 +87,11 @@ function groupAllDataByDay(sales: any[], expenses: any[], days: number) {
 
 // ── stat card ─────────────────────────────────────────────────────────────
 function KPICard({
-  label, value, sub, icon: Icon, imageUrl, trend, trendUp, color, onClick, className,
+  label, value, sub, icon: Icon, imageUrl, trend, trendUp, color, onClick, className, imageClassName,
 }: {
   label: string; value: string; sub?: string;
   icon?: React.ElementType; imageUrl?: string; trend?: string; trendUp?: boolean; color: string;
-  onClick?: () => void; className?: string;
+  onClick?: () => void; className?: string; imageClassName?: string;
 }) {
   return (
     <Card
@@ -106,7 +106,7 @@ function KPICard({
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
         {imageUrl ? (
           <div className="size-8 flex items-center justify-center shrink-0">
-            <img src={imageUrl} className="size-8 object-contain" alt={label} />
+            <img src={imageUrl} className={`size-8 object-contain ${imageClassName || ""}`} alt={label} />
           </div>
         ) : Icon ? (
           <div className={`size-8 rounded-lg ${color} flex items-center justify-center shrink-0`}>
@@ -723,9 +723,10 @@ export default function Dashboard() {
                       label={lang === "bn" ? "লোকসান" : "Loss"}
                       value={fmtMoney(lossToday)}
                       sub={t("today")}
-                      imageUrl="https://img.icons8.com/clouds/100/loss.png"
+                      imageUrl="https://img.icons8.com/external-flaticons-lineal-color-flat-icons/64/external-loss-casino-flaticons-lineal-color-flat-icons.png"
                       color="bg-rose-500"
                       className="h-full"
+                      imageClassName="dark:invert"
                     />
                   </Link>
 
@@ -1014,9 +1015,10 @@ export default function Dashboard() {
                   label={lang === "bn" ? "লোকসান" : "Loss"}
                   value={fmtMoney(lossToday)}
                   sub={t("today")}
-                  imageUrl="https://img.icons8.com/clouds/100/loss.png"
+                  imageUrl="https://img.icons8.com/external-flaticons-lineal-color-flat-icons/64/external-loss-casino-flaticons-lineal-color-flat-icons.png"
                   color="bg-rose-500"
                   trendUp={false}
+                  imageClassName="dark:invert"
                 />
               </Link>
               {canAccess(perms, "expenses") ? (
