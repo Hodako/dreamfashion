@@ -16,29 +16,29 @@ export function PaginationBar({ page, totalPages, total, pageSize, onPageChange 
   const to = Math.min(page * pageSize, total);
 
   return (
-    <div className="flex items-center justify-between gap-2 py-2 text-xs text-muted-foreground">
+    <div className="flex items-center justify-between gap-2 py-3 pb-16 md:pb-3 text-xs text-muted-foreground">
       <span>{from}–{to} / {total}</span>
       <div className="flex items-center gap-1">
         <Button
           type="button"
           variant="outline"
           size="icon"
-          className="size-7"
+          className="size-9 md:size-7"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
         >
-          <ChevronLeft className="size-3.5" />
+          <ChevronLeft className="size-4 md:size-3.5" />
         </Button>
-        <span className="px-2 font-medium text-foreground">{page}/{totalPages}</span>
+        <span className="px-2.5 font-medium text-foreground text-sm md:text-xs">{page}/{totalPages}</span>
         <Button
           type="button"
           variant="outline"
           size="icon"
-          className="size-7"
+          className="size-9 md:size-7"
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
         >
-          <ChevronRight className="size-3.5" />
+          <ChevronRight className="size-4 md:size-3.5" />
         </Button>
       </div>
     </div>
