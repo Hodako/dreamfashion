@@ -459,7 +459,7 @@
   body, html, main, .app-shell, .min-h-screen, .min-h-dvh {
     background: #ffffff !important;
     background-image: none !important;
-    color: #000000 !important;
+    color: #18181b !important;
     width: 100% !important;
     height: auto !important;
     min-height: unset !important;
@@ -483,9 +483,24 @@
     background: transparent !important;
   }
 
+  .print-avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print-page-break {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  .print-color-exact {
+    color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   /* Ensure text colors are printed correctly */
   * {
-    color: #000000 !important;
     text-shadow: none !important;
     box-shadow: none !important;
   }
