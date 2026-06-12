@@ -16,7 +16,7 @@ export function PaginationBar({ page, totalPages, total, pageSize, onPageChange 
   const to = Math.min(page * pageSize, total);
 
   return (
-    <div className="flex items-center justify-between gap-2 py-3 pb-16 md:pb-3 text-xs text-muted-foreground">
+    <div className="flex items-center justify-between gap-2 py-3 pr-14 pb-16 md:pr-0 md:pb-3 text-xs text-muted-foreground">
       <span>{from}–{to} / {total}</span>
       <div className="flex items-center gap-1">
         <Button
